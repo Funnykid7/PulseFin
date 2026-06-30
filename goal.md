@@ -5,7 +5,7 @@
 
 ## 2. Core Vision & UX Philosophy
 *   **Visual North Star:** Heavily inspired by the **PixelPlay** UI. It must utilize Material 3 "Expressive" design, featuring Dynamic Color (Monet) derived from album art.
-*   **Slickness & Polish:** Prioritize smooth Shared Element Transitions (e.g., Album Art -> Full Player) and 120fps fluid scrolling. Haptics and micro-animations are expected for a "premium" tactile feel.
+*   **Slickness & Polish:** Prioritize smooth Shared Element Transitions (e.g., Album Art → Full Player) and 120fps fluid scrolling. Haptics and micro-animations are expected for a "premium" tactile feel.
 *   **The "Set and Forget" UX:** Once the user logs into their Jellyfin server, the experience should be seamless and invisible. No complex server-switching or "hot-swapping" clutter.
 
 ## 3. Technical Stack (Strictly Android Native)
