@@ -4,7 +4,8 @@
 * **Deep Reasoning Execution:** Append the explicit structural tag `ultrathink` into complex multi-file prompt contexts to scale the underlying token bounds for complex debugging sessions.
 * **UI High-Fidelity Rule:** Keep the `frontend-design` plugin active inside the environment toolsets. Feed multi-view design screenshots directly to the model when constructing responsive layouts.
 
-## 2. Security Bounds & Server-Side Encapsulation
+## 2. Security Bounds & Server-Side Encapsulation (Pro/Cloud Layer)
+> *Note: These rules apply to future AI/Spotify-like features; the core Jellyfin client remains local-to-server.*
 * **Zero Secret Exposure:** Absolute prohibition against compiling production keys, database credentials, or AI models (OpenAI, Anthropic, Vertex AI) directly on frontend client-side architectures or plain-text environmental parameters.
 * **Backend Delegation Rule:** Wrap all transactional workflows, payment setups (Stripe), messaging providers (SendGrid, Postmark), and data transactions behind secure Edge layers, such as Supabase Edge Functions or Firebase Cloud Functions.
 * **Infrastructure Cost Failsafes:** Set active monthly budget ceilings and token throttling levels at the absolute API cluster layer. Avoid uncapped parameters to shield against sudden downstream financial burn.
@@ -27,3 +28,10 @@
   2. **Generative AI Users:** Tracking distinct call counts per individual profile.
   3. **Total Cost (USD):** Granular token model tracking mapping precise currency burn weights.
 * **NORTH STAR SCORE:** Optimize all system modifications, UI changes, and functional iterations to directly defend the **Week 1 Retention** benchmark (the volume of users returning exactly 7 days post-signup).
+* **SLICKNESS METRICS:** Monitor `playback_error` rates and `time_to_start_playback` (TTSP) to ensure the Jellyfin experience rivals native local players.
+
+## 6. Native Media Excellence (PulseFin Core)
+* **Media3 & MediaSession:** Standardize on Android Media3 (ExoPlayer) for all transport controls. All playback logic must reside within a `MediaSessionService` to ensure deep system integration (Lock screen, Android Auto, WearOS).
+* **Material 3 Expressive UI:** Implement Dynamic Color (Monet) palettes derived directly from active Album Art. Utilize Shared Element Transitions (e.g., Album -> Player) and maintain strict adherence to Adaptive Layouts (Compact, Medium, Expanded window classes).
+* **Local-First Architecture:** Use Room as the Single Source of Truth. Jellyfin API data must be mirrored to local storage to ensure "instant" UI response and offline playback capability.
+* **Performance Constraints:** Maintain a strict 60/120fps UI performance budget. Offload all metadata extraction and heavy API transformations to dedicated background Coroutine Dispatchers.
