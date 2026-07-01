@@ -20,7 +20,7 @@
 *   **Playback Engine:** Android Media3 (ExoPlayer) + MediaSessionService.
 *   **Local Layer:** Room DB as the Single Source of Truth.
 *   **Compatibility:** Min SDK 31 (Android 12+) to leverage native Dynamic Color and modern system APIs.
-*   **Programming Style:** Modularized programming is preferred to make it easier to maintain, add feature, and have a easy transition between the 'base' and 'pro' packages
+*   **Programming Style:** Modularized programming is mandatory. The core logic (Playback, Data, UI Components) must be decoupled from the app module to ensure an easy transition when building the 'Pro' version later.
 
 ## 4. Feature Roadmap
 
@@ -40,9 +40,12 @@
 *   **Performance Maturity:** Server-side transcoding for data-saving modes.
 
 ## 5. The "Pro" Vision & Business Model
-*   **Development Split:** 
-    *   **PulseFin Base:** Open-source, high-performance Jellyfin client.
-    *   **PulseFin Pro:** Closed-source project built on the core, adding advanced features, Light Mode support, and a payment model.
+*   **Development Strategy:** 
+    1.  **Phase 1 (Base):** Focus exclusively on completing the high-performance, open-source Jellyfin client in the current repository.
+    2.  **Phase 2 (Pro):** Once the Base version is mature and stable, it will be cloned into a separate, private repository. The Pro features will be developed on top of this modular foundation.
+*   **Package Name Split:**
+    *   **PulseFin Base:** `com.pulsefin.app` (Open Source)
+    *   **PulseFin Pro:** `com.pulsefin.app.pro` (Closed Source, Paid)
 *   **Pro Features (Future):**
     *   **Library Analysis:** Analyze listening patterns to create smart mixes.
     *   **AI Recommendations:** "Spotify-like" discovery and natural language search.
