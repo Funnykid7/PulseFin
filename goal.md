@@ -20,6 +20,7 @@
 *   **Playback Engine:** Android Media3 (ExoPlayer) + MediaSessionService.
 *   **Local Layer:** Room DB as the Single Source of Truth.
 *   **Compatibility:** Min SDK 31 (Android 12+) to leverage native Dynamic Color and modern system APIs.
+*   **Programming Style:** Modularized programming is preferred to make it easier to maintain, add feature, and have a easy transition between the 'base' and 'pro' packages
 
 ## 4. Feature Roadmap
 
