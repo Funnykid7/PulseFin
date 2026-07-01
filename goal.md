@@ -10,8 +10,10 @@
 
 ## 3. Technical Stack (Strictly Android Native)
 *   **Language:** Kotlin.
+*   **Package Name:** `com.pulsefin.app`
 *   **UI Framework:** Jetpack Compose with Material 3 Expressive.
-*   **Architecture:** MVI (Model-View-Intent) for robust state management.
+*   **Navigation:** Jetpack Navigation Component.
+*   **Architecture:** MVI (Model-View-Intent) with a custom lightweight implementation.
 *   **DI Framework:** Koin (chosen for simplicity and ease of setup).
 *   **Networking:** Ktor (modern, asynchronous client).
 *   **Image Loading:** Coil (integrated with Ktor for high-performance art rendering).
