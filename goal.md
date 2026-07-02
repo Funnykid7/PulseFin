@@ -48,13 +48,21 @@
     *   **PulseFin Pro:** `com.pulsefin.app.pro` (Closed Source, Paid)
 *   **Pro Features (Future):**
     *   **Library Analysis:** Analyze listening patterns to create smart mixes.
-    *   **AI Recommendations:** "Spotify-like" discovery and natural language search.
+    *   **AI Recommendations:** "Spotify-like" discovery and natural language search using **Gemini 2.5 Flash-lite** or **Gemini 3.1 Flash-lite** (via **OpenRouter** for flexibility and cost-efficiency).
+    *   **Smart Mixes:** High-fidelity, mood-based playlists generated using a "Tagging & Caching" strategy to maintain high margins.
     *   **Hybrid Data:** Merging Jellyfin metadata with MusicBrainz/Last.fm.
     *   **Advanced Auth:** Support for LDAP/SSO.
 
-## 6. Constraints & Rules
+## 6. Business Model (Pro Version)
+*   **Target Price:** $5 / month.
+*   **Infrastructure:** Web-First (Stripe + RevenueCat) to bypass 15-30% App Store fees.
+*   **Backend:** Supabase for Auth, Database, and secure Edge Functions (AI Gateway).
+*   **Margins:** Projected ~90% profit margin by offloading AI analysis to cheap, high-context models (Gemini Flash-lite).
+
+## 7. Constraints & Rules
 *   **Visuals:** Dark-mode first priority for the Base version.
 *   **Performance:** UI thread must never block. 60/120fps budget.
 *   **Privacy:** No secret exposure. All Pro AI features must be delegated to a secure backend (per `Rule_Book.md`).
+*   **Efficiency:** Implement "Tagging & Caching" to minimize AI tokens; analyze tracks once, store metadata in Supabase, and perform client-side or Edge-side matching for recommendations.
 
 
