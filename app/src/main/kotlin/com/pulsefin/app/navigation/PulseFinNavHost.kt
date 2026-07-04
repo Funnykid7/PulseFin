@@ -1,11 +1,17 @@
 package com.pulsefin.app.navigation
 
-import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -22,6 +28,7 @@ object Routes {
     const val HOME = "home"
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PulseFinNavHost(modifier: Modifier = Modifier) {
     val navController = rememberNavController()
@@ -29,9 +36,24 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
     val playbackController = koinInject<PlaybackController>()
     val scope = rememberCoroutineScope()
     val playbackState by playbackController.state.collectAsStateWithLifecycle()
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
 
     Scaffold(
-        modifier = modifier,
+        modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            LargeTopAppBar(
+                title = {
+                    Text("PulseFin", color = MaterialTheme.colorScheme.primary)
+                },
+                actions = {
+                    TextButton(onClick = { scope.launch { authRepository.logout() } }) {
+                        Text("Sign out")
+                    }
+                },
+                scrollBehavior = scrollBehavior,
+            )
+        },
         bottomBar = {
             MiniPlayer(
                 state = playbackState,
@@ -42,11 +64,11 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
         NavHost(
             navController = navController,
             startDestination = Routes.HOME,
-            modifier = Modifier.padding(innerPadding),
         ) {
             composable(Routes.HOME) {
                 HomeScreen(
-                    onLogout = { scope.launch { authRepository.logout() } },
+                    contentPadding = innerPadding,
+                    currentMediaId = playbackState.currentMediaId,
                 )
             }
         }
