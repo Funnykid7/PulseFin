@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Minimal Activity theme. The real UI is driven by PulseFinTheme in Compose; this only
+      needs to provide a transparent, dark-first system-bar window for edge-to-edge.
+    -->
+    <style name="Theme.PulseFin" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@color/pulse_window_background</item>
+    </style>
+</resources>
