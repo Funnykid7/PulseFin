@@ -1,5 +1,6 @@
 package com.pulsefin.app.ui.player
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,6 +31,7 @@ import com.pulsefin.core.playback.controller.PlaybackState
 fun MiniPlayer(
     state: PlaybackState,
     onTogglePlayPause: () -> Unit,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (!state.hasItem) return
@@ -38,7 +40,8 @@ fun MiniPlayer(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .clickable(onClick = onClick),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
