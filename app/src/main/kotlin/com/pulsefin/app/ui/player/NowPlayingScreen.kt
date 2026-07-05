@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -21,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -33,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.pulsefin.app.ui.theme.ArtworkTheme
 import com.pulsefin.core.playback.controller.PlaybackController
 import org.koin.compose.koinInject
 
@@ -41,20 +44,51 @@ import org.koin.compose.koinInject
 fun NowPlayingScreen(
     contentPadding: PaddingValues,
     onCollapse: () -> Unit,
+    onOpenQueue: () -> Unit,
     playbackController: PlaybackController = koinInject(),
 ) {
     val state by playbackController.state.collectAsStateWithLifecycle()
     val positionMs by playbackController.positionMs.collectAsStateWithLifecycle()
 
+    // Re-theme the whole screen to the current track's album art (per-screen Monet).
+    ArtworkTheme(state.artworkUrl) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            NowPlayingContent(
+                state = state,
+                positionMs = positionMs,
+                contentPadding = contentPadding,
+                onCollapse = onCollapse,
+                onOpenQueue = onOpenQueue,
+                playbackController = playbackController,
+            )
+        }
+    }
+}
+
+@Composable
+private fun NowPlayingContent(
+    state: com.pulsefin.core.playback.controller.PlaybackState,
+    positionMs: Long,
+    contentPadding: PaddingValues,
+    onCollapse: () -> Unit,
+    onOpenQueue: () -> Unit,
+    playbackController: PlaybackController,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(contentPadding)
             .padding(horizontal = 24.dp),
     ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
             IconButton(onClick = onCollapse) {
                 Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Collapse")
+            }
+            IconButton(onClick = onOpenQueue) {
+                Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = "Queue")
             }
         }
 

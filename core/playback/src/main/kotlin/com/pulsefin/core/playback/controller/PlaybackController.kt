@@ -26,6 +26,7 @@ import kotlinx.coroutines.launch
 data class PlaybackState(
     val isPlaying: Boolean = false,
     val currentMediaId: String? = null,
+    val currentIndex: Int = -1,
     val title: String? = null,
     val artist: String? = null,
     val artworkUrl: String? = null,
@@ -35,6 +36,14 @@ data class PlaybackState(
 ) {
     val hasItem: Boolean get() = currentMediaId != null
 }
+
+/** A single entry in the play queue. */
+data class QueueItem(
+    val mediaId: String,
+    val title: String,
+    val artist: String,
+    val artworkUrl: String?,
+)
 
 /**
  * Bridges the UI to the Media3 [PlaybackService] via a [MediaController]. Holds a single
@@ -52,6 +61,9 @@ class PlaybackController(private val context: Context) {
     private val _positionMs = MutableStateFlow(0L)
     val positionMs: StateFlow<Long> = _positionMs.asStateFlow()
 
+    private val _queue = MutableStateFlow<List<QueueItem>>(emptyList())
+    val queue: StateFlow<List<QueueItem>> = _queue.asStateFlow()
+
     private var controller: MediaController? = null
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var ticking = false
@@ -59,6 +71,7 @@ class PlaybackController(private val context: Context) {
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
             updateState(player)
+            updateQueue(player)
             _positionMs.value = player.currentPosition.coerceAtLeast(0L)
         }
     }
@@ -123,12 +136,35 @@ class PlaybackController(private val context: Context) {
         withController { it.seekToPreviousMediaItem() }
     }
 
+    fun playIndex(index: Int) {
+        withController { controller ->
+            if (index in 0 until controller.mediaItemCount) {
+                controller.seekToDefaultPosition(index)
+                controller.play()
+            }
+        }
+    }
+
+    private fun updateQueue(player: Player) {
+        _queue.value = (0 until player.mediaItemCount).map { i ->
+            val item = player.getMediaItemAt(i)
+            val md = item.mediaMetadata
+            QueueItem(
+                mediaId = item.mediaId,
+                title = md.title?.toString() ?: "Unknown",
+                artist = md.artist?.toString().orEmpty(),
+                artworkUrl = md.artworkUri?.toString(),
+            )
+        }
+    }
+
     private fun updateState(player: Player) {
         val metadata = player.mediaMetadata
         val duration = player.duration
         _state.value = PlaybackState(
             isPlaying = player.isPlaying,
             currentMediaId = player.currentMediaItem?.mediaId,
+            currentIndex = player.currentMediaItemIndex,
             title = metadata.title?.toString(),
             artist = metadata.artist?.toString(),
             artworkUrl = metadata.artworkUri?.toString(),

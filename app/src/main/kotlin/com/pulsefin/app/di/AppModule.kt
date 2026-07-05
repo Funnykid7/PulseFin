@@ -1,6 +1,10 @@
 package com.pulsefin.app.di
 
 import com.pulsefin.app.ui.home.HomeViewModel
+import com.pulsefin.app.ui.library.AlbumDetailViewModel
+import com.pulsefin.app.ui.library.AlbumsViewModel
+import com.pulsefin.app.ui.library.ArtistDetailViewModel
+import com.pulsefin.app.ui.library.ArtistsViewModel
 import com.pulsefin.app.ui.login.LoginViewModel
 import org.koin.androidx.viewmodel.dsl.viewModelOf
 import org.koin.core.module.Module
@@ -13,4 +17,8 @@ import org.koin.dsl.module
 val appModule: Module = module {
     viewModelOf(::LoginViewModel)
     viewModelOf(::HomeViewModel)
+    viewModelOf(::AlbumsViewModel)
+    viewModelOf(::ArtistsViewModel)
+    viewModelOf(::AlbumDetailViewModel)
+    viewModelOf(::ArtistDetailViewModel)
 }

@@ -72,6 +72,10 @@ dependencies {
 
     implementation(libs.coil.compose)
 
+    // Per-screen Monet: extract a seed from album art (Palette) and build a tonal scheme.
+    implementation(libs.androidx.palette.ktx)
+    implementation(libs.materialkolor.color.utilities)
+
     implementation(platform(libs.koin.bom))
     implementation(libs.koin.android)
     implementation(libs.koin.androidx.compose)

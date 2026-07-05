@@ -41,6 +41,9 @@ room = "2.8.4"
 # Image loading
 coil = "2.7.0"
 
+# Album-art color extraction (Monet)
+materialColorUtilities = "2.1.1"
+
 # Test
 junit = "4.13.2"
 
@@ -95,6 +98,9 @@ androidx-media3-ui = { module = "androidx.media3:media3-ui", version.ref = "medi
 
 # Image loading
 coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
+
+# Album-art color extraction (Monet)
+materialkolor-color-utilities = { module = "com.materialkolor:material-color-utilities", version.ref = "materialColorUtilities" }
 
 # Test
 junit = { group = "junit", name = "junit", version.ref = "junit" }
