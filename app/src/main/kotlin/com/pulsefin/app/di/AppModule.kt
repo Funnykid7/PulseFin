@@ -6,6 +6,7 @@ import com.pulsefin.app.ui.library.AlbumsViewModel
 import com.pulsefin.app.ui.library.ArtistDetailViewModel
 import com.pulsefin.app.ui.library.ArtistsViewModel
 import com.pulsefin.app.ui.login.LoginViewModel
+import com.pulsefin.app.ui.search.SearchViewModel
 import org.koin.androidx.viewmodel.dsl.viewModelOf
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -21,4 +22,5 @@ val appModule: Module = module {
     viewModelOf(::ArtistsViewModel)
     viewModelOf(::AlbumDetailViewModel)
     viewModelOf(::ArtistDetailViewModel)
+    viewModelOf(::SearchViewModel)
 }

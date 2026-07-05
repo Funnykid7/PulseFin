@@ -1,5 +1,8 @@
 package com.pulsefin.app.ui.player
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,6 +17,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -29,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -65,6 +72,7 @@ fun NowPlayingScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun NowPlayingContent(
     state: com.pulsefin.core.playback.controller.PlaybackState,
@@ -77,6 +85,14 @@ private fun NowPlayingContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .pointerInput(Unit) {
+                var totalDrag = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { totalDrag = 0f },
+                    onVerticalDrag = { _, dragAmount -> totalDrag += dragAmount },
+                    onDragEnd = { if (totalDrag > 220f) onCollapse() },
+                )
+            }
             .padding(contentPadding)
             .padding(horizontal = 24.dp),
     ) {
@@ -111,9 +127,10 @@ private fun NowPlayingContent(
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onBackground,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .basicMarquee(),
         )
         Spacer(Modifier.size(4.dp))
         Text(
@@ -142,6 +159,13 @@ private fun NowPlayingContent(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            IconButton(onClick = playbackController::toggleShuffle) {
+                Icon(
+                    Icons.Filled.Shuffle,
+                    contentDescription = "Shuffle",
+                    tint = if (state.shuffleEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             IconButton(onClick = playbackController::previous, enabled = state.hasPrevious) {
                 Icon(
                     Icons.Filled.SkipPrevious,
@@ -165,6 +189,13 @@ private fun NowPlayingContent(
                     Icons.Filled.SkipNext,
                     contentDescription = "Next",
                     modifier = Modifier.size(36.dp),
+                )
+            }
+            IconButton(onClick = playbackController::cycleRepeat) {
+                Icon(
+                    imageVector = if (state.isRepeatOne) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                    contentDescription = "Repeat",
+                    tint = if (state.isRepeatActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

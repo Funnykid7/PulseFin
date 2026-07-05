@@ -6,8 +6,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -38,6 +40,8 @@ import com.pulsefin.app.ui.library.ArtistsScreen
 import com.pulsefin.app.ui.player.MiniPlayer
 import com.pulsefin.app.ui.player.NowPlayingScreen
 import com.pulsefin.app.ui.player.QueueScreen
+import com.pulsefin.app.ui.search.SearchScreen
+import com.pulsefin.app.ui.theme.ArtworkTheme
 import com.pulsefin.core.domain.repository.AuthRepository
 import com.pulsefin.core.playback.controller.PlaybackController
 import kotlinx.coroutines.launch
@@ -51,6 +55,7 @@ object Routes {
     const val ARTIST_DETAIL = "artist/{artistId}"
     const val NOWPLAYING = "nowplaying"
     const val QUEUE = "queue"
+    const val SEARCH = "search"
 
     fun albumDetail(id: String) = "album/$id"
     fun artistDetail(id: String) = "artist/$id"
@@ -90,6 +95,9 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                         Text(currentTab?.label ?: "PulseFin", color = MaterialTheme.colorScheme.primary)
                     },
                     actions = {
+                        IconButton(onClick = { navController.navigate(Routes.SEARCH) }) {
+                            Icon(Icons.Filled.Search, contentDescription = "Search")
+                        }
                         TextButton(onClick = { scope.launch { authRepository.logout() } }) {
                             Text("Sign out")
                         }
@@ -103,11 +111,13 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
             // inset on tab routes; on detail routes there's no NavigationBar, so pad the column.
             Column(modifier = if (isTab) Modifier else Modifier.navigationBarsPadding()) {
                 if (playbackState.hasItem && !isFullScreen) {
-                    MiniPlayer(
-                        state = playbackState,
-                        onTogglePlayPause = playbackController::togglePlayPause,
-                        onClick = { navController.navigate(Routes.NOWPLAYING) },
-                    )
+                    ArtworkTheme(playbackState.artworkUrl) {
+                        MiniPlayer(
+                            state = playbackState,
+                            onTogglePlayPause = playbackController::togglePlayPause,
+                            onClick = { navController.navigate(Routes.NOWPLAYING) },
+                        )
+                    }
                 }
                 if (isTab) {
                     NavigationBar {
@@ -181,6 +191,14 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                 QueueScreen(
                     contentPadding = innerPadding,
                     onBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.SEARCH) {
+                SearchScreen(
+                    contentPadding = innerPadding,
+                    onBack = { navController.popBackStack() },
+                    onAlbumClick = { navController.navigate(Routes.albumDetail(it)) },
+                    onArtistClick = { navController.navigate(Routes.artistDetail(it)) },
                 )
             }
         }

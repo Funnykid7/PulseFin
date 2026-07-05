@@ -33,8 +33,12 @@ data class PlaybackState(
     val durationMs: Long = 0L,
     val hasNext: Boolean = false,
     val hasPrevious: Boolean = false,
+    val shuffleEnabled: Boolean = false,
+    val repeatMode: Int = Player.REPEAT_MODE_OFF,
 ) {
     val hasItem: Boolean get() = currentMediaId != null
+    val isRepeatActive: Boolean get() = repeatMode != Player.REPEAT_MODE_OFF
+    val isRepeatOne: Boolean get() = repeatMode == Player.REPEAT_MODE_ONE
 }
 
 /** A single entry in the play queue. */
@@ -136,6 +140,20 @@ class PlaybackController(private val context: Context) {
         withController { it.seekToPreviousMediaItem() }
     }
 
+    fun toggleShuffle() {
+        withController { it.shuffleModeEnabled = !it.shuffleModeEnabled }
+    }
+
+    fun cycleRepeat() {
+        withController {
+            it.repeatMode = when (it.repeatMode) {
+                Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                else -> Player.REPEAT_MODE_OFF
+            }
+        }
+    }
+
     fun playIndex(index: Int) {
         withController { controller ->
             if (index in 0 until controller.mediaItemCount) {
@@ -171,6 +189,8 @@ class PlaybackController(private val context: Context) {
             durationMs = if (duration == C.TIME_UNSET || duration < 0) 0L else duration,
             hasNext = player.hasNextMediaItem(),
             hasPrevious = player.hasPreviousMediaItem(),
+            shuffleEnabled = player.shuffleModeEnabled,
+            repeatMode = player.repeatMode,
         )
     }
 }

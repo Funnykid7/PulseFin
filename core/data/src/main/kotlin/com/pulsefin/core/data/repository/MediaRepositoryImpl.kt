@@ -103,7 +103,31 @@ class MediaRepositoryImpl(
         }
 
     override suspend fun search(query: String): PulseResult<SearchResults> =
-        PulseResult.Success(SearchResults(artists = emptyList(), albums = emptyList(), songs = emptyList()))
+        withContext(dispatchers.io) {
+            PulseResult.runCatchingResult {
+                if (query.isBlank()) {
+                    return@runCatchingResult SearchResults(emptyList(), emptyList(), emptyList())
+                }
+                val api = requireApi()
+                val items = api.itemsApi.getItems(
+                    GetItemsRequest(
+                        searchTerm = query,
+                        includeItemTypes = listOf(
+                            BaseItemKind.AUDIO,
+                            BaseItemKind.MUSIC_ALBUM,
+                            BaseItemKind.MUSIC_ARTIST,
+                        ),
+                        recursive = true,
+                        limit = 60,
+                    ),
+                ).content.items.orEmpty()
+                SearchResults(
+                    artists = items.filter { it.type == BaseItemKind.MUSIC_ARTIST }.map { it.toArtist(api) },
+                    albums = items.filter { it.type == BaseItemKind.MUSIC_ALBUM }.map { it.toAlbum(api) },
+                    songs = items.filter { it.type == BaseItemKind.AUDIO }.map { it.toSong(api) },
+                )
+            }
+        }
 
     private suspend fun requireApi(): ApiClient = apiProvider.api() ?: error("Not signed in")
 }
