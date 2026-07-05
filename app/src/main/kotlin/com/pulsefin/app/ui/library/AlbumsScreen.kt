@@ -32,6 +32,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.domain.model.Album
 import com.pulsefin.core.domain.repository.MediaRepository
 import kotlinx.coroutines.flow.SharingStarted
@@ -47,12 +48,14 @@ class AlbumsViewModel(private val repository: MediaRepository) : ViewModel() {
     var isRefreshing by mutableStateOf(false)
         private set
 
-    init { refresh() }
+    init { sync(force = false) }
 
-    fun refresh() {
+    fun refresh() = sync(force = true)
+
+    private fun sync(force: Boolean) {
         viewModelScope.launch {
             isRefreshing = true
-            repository.refreshLibrary()
+            repository.refreshLibrary(force = force)
             isRefreshing = false
         }
     }
@@ -114,7 +117,7 @@ private fun AlbumCard(album: Album, onClick: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(MaterialTheme.shapes.medium),
+                .clip(SquircleShape),
         )
         Text(
             text = album.name,

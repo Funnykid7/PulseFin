@@ -17,9 +17,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -43,6 +44,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import com.pulsefin.app.ui.theme.ArtworkTheme
+import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.common.result.PulseResult
 import com.pulsefin.core.domain.model.Song
 import com.pulsefin.core.domain.repository.MediaRepository
@@ -80,7 +82,7 @@ class AlbumDetailViewModel(
     fun play(index: Int) = playbackController.play(uiState.tracks, index)
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun AlbumDetailScreen(
     albumId: String,
@@ -109,7 +111,7 @@ fun AlbumDetailScreen(
                 )
 
                 when {
-                    state.isLoading -> Box1 { CircularProgressIndicator() }
+                    state.isLoading -> Box1 { LoadingIndicator() }
                     state.error != null -> Box1 { Text(state.error, color = MaterialTheme.colorScheme.error) }
                     else -> LazyColumn(
                         modifier = Modifier.fillMaxSize(),
@@ -152,7 +154,7 @@ private fun AlbumHeader(artUrl: String?, albumName: String, artistName: String, 
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .size(220.dp)
-                .clip(MaterialTheme.shapes.extraLarge),
+                .clip(SquircleShape),
         )
         Spacer(Modifier.size(16.dp))
         Text(albumName, style = MaterialTheme.typography.headlineSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)

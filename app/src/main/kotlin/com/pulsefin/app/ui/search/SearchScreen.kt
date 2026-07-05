@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
+import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.common.result.PulseResult
 import com.pulsefin.core.domain.model.Song
 import com.pulsefin.core.domain.repository.MediaRepository
@@ -192,7 +193,7 @@ private fun ResultRow(title: String, subtitle: String?, artworkUrl: String?, cir
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .size(48.dp)
-                    .clip(if (circle) CircleShape else MaterialTheme.shapes.small),
+                    .clip(if (circle) CircleShape else SquircleShape),
             )
         },
         headlineContent = {

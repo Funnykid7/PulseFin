@@ -47,6 +47,9 @@ class MediaRepositoryImpl(
 
     private val refreshMutex = Mutex()
 
+    @Volatile
+    private var hasSyncedThisProcess = false
+
     override fun observeSongs(): Flow<List<Song>> =
         songDao.observeAll().map { rows -> rows.map { it.toSong() } }
 
@@ -56,16 +59,20 @@ class MediaRepositoryImpl(
     override fun observeArtists(): Flow<List<Artist>> =
         artistDao.observeAll().map { rows -> rows.map { it.toArtist() } }
 
-    override suspend fun refreshLibrary(): PulseResult<Unit> = withContext(dispatchers.io) {
+    override suspend fun refreshLibrary(force: Boolean): PulseResult<Unit> = withContext(dispatchers.io) {
         PulseResult.runCatchingResult {
             refreshMutex.withLock {
+                // Dedupe the auto-sync the three tabs each kick off; pull-to-refresh forces it.
+                if (hasSyncedThisProcess && !force) return@withLock
                 val api = requireApi()
                 val songs = fetchItems(api, BaseItemKind.AUDIO, limit = 500).map { it.toSong(api) }
                 val albums = fetchItems(api, BaseItemKind.MUSIC_ALBUM).map { it.toAlbum(api) }
                 val artists = fetchItems(api, BaseItemKind.MUSIC_ARTIST).map { it.toArtist(api) }
-                songDao.clear(); songDao.upsertAll(songs.map { it.toEntity() })
-                albumDao.clear(); albumDao.upsertAll(albums.map { it.toEntity() })
-                artistDao.clear(); artistDao.upsertAll(artists.map { it.toEntity() })
+                // Atomic swaps -> observers see a single emission, no empty flash.
+                songDao.replaceAll(songs.map { it.toEntity() })
+                albumDao.replaceAll(albums.map { it.toEntity() })
+                artistDao.replaceAll(artists.map { it.toEntity() })
+                hasSyncedThisProcess = true
             }
         }
     }
@@ -166,7 +173,14 @@ private fun BaseItemDto.toArtist(api: ApiClient): Artist = Artist(
 )
 
 private fun BaseItemDto.artworkUrl(api: ApiClient): String? = runCatching {
-    api.imageApi.getItemImageUrl(itemId = id, imageType = ImageType.PRIMARY)
+    // Bounded size: full-res covers per row were the scroll-jank cost. 512px is ample for
+    // phone full-screen art and downsamples cheaply for list thumbnails.
+    api.imageApi.getItemImageUrl(
+        itemId = id,
+        imageType = ImageType.PRIMARY,
+        maxWidth = 512,
+        maxHeight = 512,
+    )
 }.getOrNull()
 
 /** Direct-play URLs must carry auth for ExoPlayer; append the token if the SDK didn't. */

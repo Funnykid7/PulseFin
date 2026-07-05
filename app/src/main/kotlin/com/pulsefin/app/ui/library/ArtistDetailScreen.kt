@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
+import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.common.result.PulseResult
 import com.pulsefin.core.domain.model.Album
 import com.pulsefin.core.domain.repository.MediaRepository
@@ -120,7 +121,7 @@ fun ArtistDetailScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .aspectRatio(1f)
-                                    .clip(MaterialTheme.shapes.medium),
+                                    .clip(SquircleShape),
                             )
                             Text(
                                 text = album.name,

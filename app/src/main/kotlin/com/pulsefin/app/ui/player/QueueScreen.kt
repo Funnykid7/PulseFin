@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.playback.controller.PlaybackController
 import org.koin.compose.koinInject
 
@@ -72,7 +73,7 @@ fun QueueScreen(
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
                                     .size(48.dp)
-                                    .clip(MaterialTheme.shapes.small),
+                                    .clip(SquircleShape),
                             )
                         },
                         headlineContent = {

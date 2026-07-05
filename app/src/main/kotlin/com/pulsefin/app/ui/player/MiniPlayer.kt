@@ -23,6 +23,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.playback.controller.PlaybackState
 
 /** Floating now-playing card. Renders nothing until something is loaded into the player. */
@@ -58,7 +59,7 @@ fun MiniPlayer(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .size(52.dp)
-                    .clip(MaterialTheme.shapes.medium),
+                    .clip(SquircleShape),
             )
             Column(
                 modifier = Modifier

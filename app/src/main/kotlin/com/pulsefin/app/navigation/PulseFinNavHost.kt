@@ -77,7 +77,9 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
     val playbackController = koinInject<PlaybackController>()
     val scope = rememberCoroutineScope()
     val playbackState by playbackController.state.collectAsStateWithLifecycle()
-    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    // LargeTopAppBar is designed to pair with exitUntilCollapsed (not enterAlways), which
+    // makes the large title collapse smoothly instead of jumping around.
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route

@@ -16,8 +16,11 @@ interface MediaRepository {
     fun observeAlbums(): Flow<List<Album>>
     fun observeArtists(): Flow<List<Artist>>
 
-    /** Fetches songs/albums/artists from the server and mirrors them into Room. */
-    suspend fun refreshLibrary(): PulseResult<Unit>
+    /**
+     * Fetches songs/albums/artists from the server and mirrors them into Room. Skips the network
+     * if already synced this process unless [force] is set (e.g. pull-to-refresh).
+     */
+    suspend fun refreshLibrary(force: Boolean = false): PulseResult<Unit>
 
     suspend fun songsForAlbum(albumId: String): PulseResult<List<Song>>
 

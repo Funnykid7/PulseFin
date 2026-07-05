@@ -10,6 +10,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -54,6 +55,13 @@ interface SongDao {
 
     @Query("DELETE FROM songs")
     suspend fun clear()
+
+    /** Atomic swap so observers see a single emission (no empty flash between clear and insert). */
+    @Transaction
+    suspend fun replaceAll(songs: List<SongEntity>) {
+        clear()
+        upsertAll(songs)
+    }
 }
 
 @Dao
@@ -66,6 +74,12 @@ interface AlbumDao {
 
     @Query("DELETE FROM albums")
     suspend fun clear()
+
+    @Transaction
+    suspend fun replaceAll(albums: List<AlbumEntity>) {
+        clear()
+        upsertAll(albums)
+    }
 }
 
 @Dao
@@ -78,6 +92,12 @@ interface ArtistDao {
 
     @Query("DELETE FROM artists")
     suspend fun clear()
+
+    @Transaction
+    suspend fun replaceAll(artists: List<ArtistEntity>) {
+        clear()
+        upsertAll(artists)
+    }
 }
 
 @Database(

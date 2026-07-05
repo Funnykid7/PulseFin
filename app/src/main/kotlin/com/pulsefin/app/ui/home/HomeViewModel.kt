@@ -24,12 +24,14 @@ class HomeViewModel(
     var isRefreshing by mutableStateOf(false)
         private set
 
-    init { refresh() }
+    init { sync(force = false) }
 
-    fun refresh() {
+    fun refresh() = sync(force = true)
+
+    private fun sync(force: Boolean) {
         viewModelScope.launch {
             isRefreshing = true
-            repository.refreshLibrary()
+            repository.refreshLibrary(force = force)
             isRefreshing = false
         }
     }

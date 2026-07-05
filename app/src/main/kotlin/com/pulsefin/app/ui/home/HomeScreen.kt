@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.domain.model.Song
 import org.koin.androidx.compose.koinViewModel
 
@@ -85,7 +86,7 @@ private fun SongRow(song: Song, isPlaying: Boolean, onClick: () -> Unit) {
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .size(56.dp)
-                    .clip(MaterialTheme.shapes.medium),
+                    .clip(SquircleShape),
             )
         },
         headlineContent = {
