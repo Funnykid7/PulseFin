@@ -3,12 +3,22 @@ package com.pulsefin.core.data.repository
 import com.pulsefin.core.common.dispatchers.AppDispatchers
 import com.pulsefin.core.common.result.PulseResult
 import com.pulsefin.core.data.jellyfin.JellyfinApiProvider
+import com.pulsefin.core.data.local.AlbumDao
+import com.pulsefin.core.data.local.AlbumEntity
+import com.pulsefin.core.data.local.ArtistDao
+import com.pulsefin.core.data.local.ArtistEntity
+import com.pulsefin.core.data.local.SongDao
+import com.pulsefin.core.data.local.SongEntity
 import com.pulsefin.core.domain.model.Album
 import com.pulsefin.core.domain.model.Artist
 import com.pulsefin.core.domain.model.MediaId
 import com.pulsefin.core.domain.model.Song
 import com.pulsefin.core.domain.repository.MediaRepository
 import com.pulsefin.core.domain.repository.SearchResults
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.audioApi
@@ -22,56 +32,43 @@ import org.jellyfin.sdk.model.api.request.GetItemsRequest
 import java.util.UUID
 
 /**
- * Reads the music library from Jellyfin via the official SDK. Fetched directly from the
- * network for now (Room mirroring / offline is a later increment).
+ * Room is the single source of truth for the browse lists: the UI observes the DAOs, while
+ * [refreshLibrary] mirrors the Jellyfin server into Room. If a refresh fails (e.g. offline),
+ * the observed Room data simply stays, so the last-synced library remains browsable.
+ * Detail and search queries hit the network directly.
  */
 class MediaRepositoryImpl(
     private val apiProvider: JellyfinApiProvider,
     private val dispatchers: AppDispatchers,
+    private val songDao: SongDao,
+    private val albumDao: AlbumDao,
+    private val artistDao: ArtistDao,
 ) : MediaRepository {
 
-    override suspend fun songs(limit: Int): PulseResult<List<Song>> =
-        withContext(dispatchers.io) {
-            PulseResult.runCatchingResult {
-                val api = requireApi()
-                api.itemsApi.getItems(
-                    GetItemsRequest(
-                        includeItemTypes = listOf(BaseItemKind.AUDIO),
-                        recursive = true,
-                        sortBy = listOf(ItemSortBy.SORT_NAME),
-                        limit = limit,
-                    ),
-                ).content.items.orEmpty().map { it.toSong(api) }
-            }
-        }
+    private val refreshMutex = Mutex()
 
-    override suspend fun albums(): PulseResult<List<Album>> =
-        withContext(dispatchers.io) {
-            PulseResult.runCatchingResult {
-                val api = requireApi()
-                api.itemsApi.getItems(
-                    GetItemsRequest(
-                        includeItemTypes = listOf(BaseItemKind.MUSIC_ALBUM),
-                        recursive = true,
-                        sortBy = listOf(ItemSortBy.SORT_NAME),
-                    ),
-                ).content.items.orEmpty().map { it.toAlbum(api) }
-            }
-        }
+    override fun observeSongs(): Flow<List<Song>> =
+        songDao.observeAll().map { rows -> rows.map { it.toSong() } }
 
-    override suspend fun artists(): PulseResult<List<Artist>> =
-        withContext(dispatchers.io) {
-            PulseResult.runCatchingResult {
+    override fun observeAlbums(): Flow<List<Album>> =
+        albumDao.observeAll().map { rows -> rows.map { it.toAlbum() } }
+
+    override fun observeArtists(): Flow<List<Artist>> =
+        artistDao.observeAll().map { rows -> rows.map { it.toArtist() } }
+
+    override suspend fun refreshLibrary(): PulseResult<Unit> = withContext(dispatchers.io) {
+        PulseResult.runCatchingResult {
+            refreshMutex.withLock {
                 val api = requireApi()
-                api.itemsApi.getItems(
-                    GetItemsRequest(
-                        includeItemTypes = listOf(BaseItemKind.MUSIC_ARTIST),
-                        recursive = true,
-                        sortBy = listOf(ItemSortBy.SORT_NAME),
-                    ),
-                ).content.items.orEmpty().map { it.toArtist(api) }
+                val songs = fetchItems(api, BaseItemKind.AUDIO, limit = 500).map { it.toSong(api) }
+                val albums = fetchItems(api, BaseItemKind.MUSIC_ALBUM).map { it.toAlbum(api) }
+                val artists = fetchItems(api, BaseItemKind.MUSIC_ARTIST).map { it.toArtist(api) }
+                songDao.clear(); songDao.upsertAll(songs.map { it.toEntity() })
+                albumDao.clear(); albumDao.upsertAll(albums.map { it.toEntity() })
+                artistDao.clear(); artistDao.upsertAll(artists.map { it.toEntity() })
             }
         }
+    }
 
     override suspend fun songsForAlbum(albumId: String): PulseResult<List<Song>> =
         withContext(dispatchers.io) {
@@ -130,7 +127,19 @@ class MediaRepositoryImpl(
         }
 
     private suspend fun requireApi(): ApiClient = apiProvider.api() ?: error("Not signed in")
+
+    private suspend fun fetchItems(api: ApiClient, type: BaseItemKind, limit: Int? = null): List<BaseItemDto> =
+        api.itemsApi.getItems(
+            GetItemsRequest(
+                includeItemTypes = listOf(type),
+                recursive = true,
+                sortBy = listOf(ItemSortBy.SORT_NAME),
+                limit = limit,
+            ),
+        ).content.items.orEmpty()
 }
+
+// --- Jellyfin DTO -> domain ---
 
 private fun BaseItemDto.toSong(api: ApiClient): Song = Song(
     id = MediaId(id.toString()),
@@ -166,3 +175,13 @@ private fun ensureApiKey(url: String, token: String?): String {
     val separator = if (url.contains('?')) '&' else '?'
     return "$url${separator}api_key=$token"
 }
+
+// --- domain <-> Room entity ---
+
+private fun Song.toEntity() = SongEntity(id.value, title, albumName, artistName, durationMs, artworkUrl, streamUrl)
+private fun Album.toEntity() = AlbumEntity(id.value, name, artistName, artworkUrl, year)
+private fun Artist.toEntity() = ArtistEntity(id.value, name, artworkUrl)
+
+private fun SongEntity.toSong() = Song(MediaId(id), title, albumName, artistName, durationMs, artworkUrl, streamUrl)
+private fun AlbumEntity.toAlbum() = Album(MediaId(id), name, artistName, artworkUrl, year)
+private fun ArtistEntity.toArtist() = Artist(MediaId(id), name, artworkUrl)

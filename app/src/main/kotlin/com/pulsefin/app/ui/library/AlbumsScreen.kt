@@ -8,13 +8,16 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,52 +30,49 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
-import com.pulsefin.core.common.result.PulseResult
 import com.pulsefin.core.domain.model.Album
 import com.pulsefin.core.domain.repository.MediaRepository
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
-data class AlbumsUiState(
-    val isLoading: Boolean = true,
-    val albums: List<Album> = emptyList(),
-    val error: String? = null,
-)
-
 class AlbumsViewModel(private val repository: MediaRepository) : ViewModel() {
-    var uiState by mutableStateOf(AlbumsUiState())
+    val albums: StateFlow<List<Album>> = repository.observeAlbums()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    var isRefreshing by mutableStateOf(false)
         private set
 
-    init { load() }
+    init { refresh() }
 
-    fun load() {
-        uiState = uiState.copy(isLoading = true, error = null)
+    fun refresh() {
         viewModelScope.launch {
-            uiState = when (val result = repository.albums()) {
-                is PulseResult.Success -> AlbumsUiState(isLoading = false, albums = result.data)
-                is PulseResult.Failure -> AlbumsUiState(isLoading = false, error = result.error.message ?: "Couldn't load albums")
-            }
+            isRefreshing = true
+            repository.refreshLibrary()
+            isRefreshing = false
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AlbumsScreen(
     contentPadding: PaddingValues,
     onAlbumClick: (String) -> Unit,
     viewModel: AlbumsViewModel = koinViewModel(),
 ) {
-    val state = viewModel.uiState
-    when {
-        state.isLoading -> Centered(contentPadding) { CircularProgressIndicator() }
-        state.error != null -> Centered(contentPadding) {
-            Text(state.error, color = MaterialTheme.colorScheme.error)
-        }
-        state.albums.isEmpty() -> Centered(contentPadding) {
-            Text("No albums found.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        else -> LazyVerticalGrid(
+    val albums by viewModel.albums.collectAsStateWithLifecycle()
+
+    PullToRefreshBox(
+        isRefreshing = viewModel.isRefreshing,
+        onRefresh = viewModel::refresh,
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
@@ -84,8 +84,21 @@ fun AlbumsScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            items(state.albums, key = { it.id.value }) { album ->
-                AlbumCard(album = album, onClick = { onAlbumClick(album.id.value) })
+            if (albums.isEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("No albums yet — pull to refresh.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            } else {
+                items(albums, key = { it.id.value }) { album ->
+                    AlbumCard(album = album, onClick = { onAlbumClick(album.id.value) })
+                }
             }
         }
     }
@@ -119,14 +132,4 @@ private fun AlbumCard(album: Album, onClick: () -> Unit) {
             overflow = TextOverflow.Ellipsis,
         )
     }
-}
-
-@Composable
-internal fun Centered(contentPadding: PaddingValues, content: @Composable () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(contentPadding),
-        contentAlignment = Alignment.Center,
-    ) { content() }
 }

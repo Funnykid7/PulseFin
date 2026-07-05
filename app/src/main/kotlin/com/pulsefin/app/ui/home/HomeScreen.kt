@@ -4,16 +4,17 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -22,40 +23,50 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.pulsefin.core.domain.model.Song
+import org.koin.androidx.compose.koinViewModel
 
 /**
- * Home = a flat, tappable list of the server's songs, with the now-playing row highlighted.
- * The top bar and mini-player live in the surrounding scaffold; this screen owns the list.
- * Becomes the PixelPlay-style "Your Mix" feed in a later increment.
+ * Songs tab: the flat song list, served from Room (instant/offline) and refreshable by
+ * pull-to-refresh. The now-playing row is highlighted.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     contentPadding: PaddingValues,
     currentMediaId: String?,
-    viewModel: HomeViewModel = org.koin.androidx.compose.koinViewModel(),
+    viewModel: HomeViewModel = koinViewModel(),
 ) {
-    val state = viewModel.uiState
+    val songs by viewModel.songs.collectAsStateWithLifecycle()
 
-    when {
-        state.isLoading -> Centered(contentPadding) { CircularProgressIndicator() }
-        state.error != null -> Centered(contentPadding) {
-            Text(state.error, color = MaterialTheme.colorScheme.error)
-        }
-        state.songs.isEmpty() -> Centered(contentPadding) {
-            Text("No songs found on your server.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        else -> LazyColumn(
+    PullToRefreshBox(
+        isRefreshing = viewModel.isRefreshing,
+        onRefresh = viewModel::refresh,
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = contentPadding,
         ) {
-            itemsIndexed(state.songs, key = { _, song -> song.id.value }) { index, song ->
-                SongRow(
-                    song = song,
-                    isPlaying = song.id.value == currentMediaId,
-                    onClick = { viewModel.onSongClick(index) },
-                )
+            if (songs.isEmpty()) {
+                item {
+                    Box(Modifier.fillParentMaxSize(), Alignment.Center) {
+                        Text(
+                            "No songs yet — pull to refresh.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            } else {
+                itemsIndexed(songs, key = { _, song -> song.id.value }) { index, song ->
+                    SongRow(
+                        song = song,
+                        isPlaying = song.id.value == currentMediaId,
+                        onClick = { viewModel.onSongClick(index) },
+                    )
+                }
             }
         }
     }
@@ -104,18 +115,6 @@ private fun SongRow(song: Song, isPlaying: Boolean, onClick: () -> Unit) {
             )
         },
     )
-}
-
-@Composable
-private fun Centered(contentPadding: PaddingValues, content: @Composable () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(contentPadding),
-        contentAlignment = Alignment.Center,
-    ) {
-        content()
-    }
 }
 
 private fun formatDuration(ms: Long): String {

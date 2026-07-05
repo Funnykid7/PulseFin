@@ -4,18 +4,20 @@ import com.pulsefin.core.common.result.PulseResult
 import com.pulsefin.core.domain.model.Album
 import com.pulsefin.core.domain.model.Artist
 import com.pulsefin.core.domain.model.Song
+import kotlinx.coroutines.flow.Flow
 
 /**
- * Read access to the music library, fetched from the Jellyfin server (Room mirroring for
- * offline is a later increment).
+ * Read access to the music library. The browse lists are served from Room (single source of
+ * truth) as reactive [Flow]s for instant, offline-capable reads; [refreshLibrary] syncs them
+ * from the Jellyfin server. Detail/search queries go directly to the network.
  */
 interface MediaRepository {
-    /** A flat list of songs from the server, for basic browse-and-play. */
-    suspend fun songs(limit: Int = 200): PulseResult<List<Song>>
+    fun observeSongs(): Flow<List<Song>>
+    fun observeAlbums(): Flow<List<Album>>
+    fun observeArtists(): Flow<List<Artist>>
 
-    suspend fun albums(): PulseResult<List<Album>>
-
-    suspend fun artists(): PulseResult<List<Artist>>
+    /** Fetches songs/albums/artists from the server and mirrors them into Room. */
+    suspend fun refreshLibrary(): PulseResult<Unit>
 
     suspend fun songsForAlbum(albumId: String): PulseResult<List<Song>>
 

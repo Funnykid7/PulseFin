@@ -4,6 +4,8 @@ import com.pulsefin.core.common.dispatchers.AppDispatchers
 import com.pulsefin.core.common.dispatchers.DefaultAppDispatchers
 import com.pulsefin.core.data.jellyfin.JellyfinApiProvider
 import com.pulsefin.core.data.jellyfin.JellyfinClientFactory
+import com.pulsefin.core.data.local.AlbumDao
+import com.pulsefin.core.data.local.ArtistDao
 import com.pulsefin.core.data.local.PulseFinDatabase
 import com.pulsefin.core.data.local.SessionStore
 import com.pulsefin.core.data.local.SongDao
@@ -28,10 +30,12 @@ val dataModule: Module = module {
 
     single { PulseFinDatabase.build(androidContext()) }
     single<SongDao> { get<PulseFinDatabase>().songDao() }
+    single<AlbumDao> { get<PulseFinDatabase>().albumDao() }
+    single<ArtistDao> { get<PulseFinDatabase>().artistDao() }
 
     single { SessionStore(androidContext()) }
     single { JellyfinApiProvider(get(), get()) }
 
     single<AuthRepository> { AuthRepositoryImpl(get(), get(), get()) }
-    single<MediaRepository> { MediaRepositoryImpl(get(), get()) }
+    single<MediaRepository> { MediaRepositoryImpl(get(), get(), get(), get(), get()) }
 }
