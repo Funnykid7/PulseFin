@@ -1,23 +1,28 @@
 package com.pulsefin.app.navigation
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.unit.dp
+import com.pulsefin.core.designsystem.theme.searchShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -97,12 +102,20 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                         Text(currentTab?.label ?: "PulseFin", color = MaterialTheme.colorScheme.primary)
                     },
                     actions = {
-                        IconButton(onClick = { navController.navigate(Routes.SEARCH) }) {
+                        FilledTonalIconButton(
+                            onClick = { navController.navigate(Routes.SEARCH) },
+                            shape = searchShape(),
+                        ) {
                             Icon(Icons.Filled.Search, contentDescription = "Search")
                         }
-                        TextButton(onClick = { scope.launch { authRepository.logout() } }) {
+                        Spacer(Modifier.width(8.dp))
+                        FilledTonalButton(
+                            onClick = { scope.launch { authRepository.logout() } },
+                            shape = CircleShape,
+                        ) {
                             Text("Sign out")
                         }
+                        Spacer(Modifier.width(8.dp))
                     },
                     scrollBehavior = scrollBehavior,
                 )

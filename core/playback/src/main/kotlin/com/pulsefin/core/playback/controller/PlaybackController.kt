@@ -10,6 +10,7 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
+import com.pulsefin.core.common.util.sizedArtUrl
 import com.pulsefin.core.domain.model.Song
 import com.pulsefin.core.playback.service.PlaybackService
 import kotlinx.coroutines.CoroutineScope
@@ -205,7 +206,7 @@ private fun Song.toMediaItem(): MediaItem? {
                 .setTitle(title)
                 .setArtist(artistName)
                 .setAlbumTitle(albumName)
-                .apply { artworkUrl?.let { setArtworkUri(Uri.parse(it)) } }
+                .apply { sizedArtUrl(artworkUrl, 720)?.let { setArtworkUri(Uri.parse(it)) } }
                 .build(),
         )
         .build()

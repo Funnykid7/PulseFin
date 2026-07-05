@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
+import com.pulsefin.core.common.util.sizedArtUrl
 import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.common.result.PulseResult
 import com.pulsefin.core.domain.model.Song
@@ -188,7 +189,7 @@ private fun ResultRow(title: String, subtitle: String?, artworkUrl: String?, cir
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         leadingContent = {
             AsyncImage(
-                model = artworkUrl,
+                model = sizedArtUrl(artworkUrl, 180),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

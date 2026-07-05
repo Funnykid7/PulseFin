@@ -43,7 +43,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.pulsefin.app.ui.theme.ArtworkTheme
-import com.pulsefin.core.designsystem.theme.heroArtShape
+import com.pulsefin.core.designsystem.theme.RoundedHeroShape
+import com.pulsefin.core.designsystem.theme.cookieShape
 import com.pulsefin.core.playback.controller.PlaybackController
 import org.koin.compose.koinInject
 
@@ -118,7 +119,7 @@ private fun NowPlayingContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(heroArtShape()),
+                .clip(RoundedHeroShape),
         )
 
         Spacer(Modifier.size(28.dp))
@@ -177,6 +178,7 @@ private fun NowPlayingContent(
             FilledIconButton(
                 onClick = playbackController::togglePlayPause,
                 modifier = Modifier.size(72.dp),
+                shape = cookieShape(),
                 colors = IconButtonDefaults.filledIconButtonColors(),
             ) {
                 Icon(

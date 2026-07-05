@@ -44,6 +44,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import com.pulsefin.app.ui.theme.ArtworkTheme
+import com.pulsefin.core.common.util.sizedArtUrl
 import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.common.result.PulseResult
 import com.pulsefin.core.domain.model.Song
@@ -94,7 +95,7 @@ fun AlbumDetailScreen(
     LaunchedEffect(albumId) { viewModel.load(albumId) }
     val state = viewModel.uiState
     val albumName = state.tracks.firstOrNull()?.albumName?.ifBlank { null } ?: "Album"
-    val artUrl = state.tracks.firstOrNull()?.artworkUrl
+    val artUrl = sizedArtUrl(state.tracks.firstOrNull()?.artworkUrl, 512)
 
     ArtworkTheme(artUrl) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {

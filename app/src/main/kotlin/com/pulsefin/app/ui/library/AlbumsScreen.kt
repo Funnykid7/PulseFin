@@ -32,6 +32,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.pulsefin.core.common.util.sizedArtUrl
 import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.domain.model.Album
 import com.pulsefin.core.domain.repository.MediaRepository
@@ -111,7 +112,7 @@ fun AlbumsScreen(
 private fun AlbumCard(album: Album, onClick: () -> Unit) {
     Column(modifier = Modifier.clickable(onClick = onClick)) {
         AsyncImage(
-            model = album.artworkUrl,
+            model = sizedArtUrl(album.artworkUrl, 320),
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier

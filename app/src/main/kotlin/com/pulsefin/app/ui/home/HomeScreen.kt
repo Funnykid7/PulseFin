@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.pulsefin.core.common.util.sizedArtUrl
 import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.domain.model.Song
 import org.koin.androidx.compose.koinViewModel
@@ -81,7 +82,7 @@ private fun SongRow(song: Song, isPlaying: Boolean, onClick: () -> Unit) {
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         leadingContent = {
             AsyncImage(
-                model = song.artworkUrl,
+                model = sizedArtUrl(song.artworkUrl, 180),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

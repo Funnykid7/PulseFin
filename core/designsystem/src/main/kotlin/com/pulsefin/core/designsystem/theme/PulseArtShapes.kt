@@ -6,16 +6,20 @@ import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.dp
 
-/**
- * Expressive album-art shapes. Per the design direction: a bold scalloped shape for the
- * Now Playing hero art, and a soft squircle for list/grid/mini-player thumbnails.
- */
-
-/** Subtle squircle for thumbnails (percent-based so it scales with the art size). */
+/** Subtle squircle for list/grid/mini-player thumbnails (percent-based, scales with size). */
 val SquircleShape: Shape = RoundedCornerShape(percent = 28)
 
-/** Bold M3 Expressive scalloped "cookie" shape for the Now Playing hero art. */
+/** Rounded square for the Now Playing hero art. */
+val RoundedHeroShape: Shape = RoundedCornerShape(32.dp)
+
+/** Bold M3 Expressive scalloped "cookie" for the play/pause button. */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun heroArtShape(): Shape = MaterialShapes.Cookie12Sided.toShape()
+fun cookieShape(): Shape = MaterialShapes.Cookie9Sided.toShape()
+
+/** A distinct clover shape for the search action. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun searchShape(): Shape = MaterialShapes.Clover4Leaf.toShape()

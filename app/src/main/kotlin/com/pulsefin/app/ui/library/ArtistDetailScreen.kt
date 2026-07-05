@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
+import com.pulsefin.core.common.util.sizedArtUrl
 import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.common.result.PulseResult
 import com.pulsefin.core.domain.model.Album
@@ -115,7 +116,7 @@ fun ArtistDetailScreen(
                     items(state.albums, key = { it.id.value }) { album ->
                         Column(modifier = Modifier.clickable { onAlbumClick(album.id.value) }) {
                             AsyncImage(
-                                model = album.artworkUrl,
+                                model = sizedArtUrl(album.artworkUrl, 320),
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier

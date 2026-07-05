@@ -29,6 +29,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.pulsefin.core.common.util.sizedArtUrl
 import com.pulsefin.core.domain.model.Artist
 import com.pulsefin.core.domain.repository.MediaRepository
 import kotlinx.coroutines.flow.SharingStarted
@@ -88,7 +89,7 @@ fun ArtistsScreen(
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                         leadingContent = {
                             AsyncImage(
-                                model = artist.artworkUrl,
+                                model = sizedArtUrl(artist.artworkUrl, 180),
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier

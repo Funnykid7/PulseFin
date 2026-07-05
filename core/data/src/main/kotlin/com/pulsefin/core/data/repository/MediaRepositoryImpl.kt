@@ -173,14 +173,9 @@ private fun BaseItemDto.toArtist(api: ApiClient): Artist = Artist(
 )
 
 private fun BaseItemDto.artworkUrl(api: ApiClient): String? = runCatching {
-    // Bounded size: full-res covers per row were the scroll-jank cost. 512px is ample for
-    // phone full-screen art and downsamples cheaply for list thumbnails.
-    api.imageApi.getItemImageUrl(
-        itemId = id,
-        imageType = ImageType.PRIMARY,
-        maxWidth = 512,
-        maxHeight = 512,
-    )
+    // Store the base URL; callers append the size they need via sizedArtUrl (tiny for list
+    // thumbnails, larger for the Now Playing hero) so lists stay cheap to scroll.
+    api.imageApi.getItemImageUrl(itemId = id, imageType = ImageType.PRIMARY)
 }.getOrNull()
 
 /** Direct-play URLs must carry auth for ExoPlayer; append the token if the SDK didn't. */
