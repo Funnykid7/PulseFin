@@ -1,6 +1,11 @@
 package com.pulsefin.app.ui.player
 
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,6 +27,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.pulsefin.app.ui.components.AnimatedPlayPauseIcon
+import com.pulsefin.app.ui.components.bouncyClickable
 import com.pulsefin.app.ui.components.pressScale
 import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.playback.controller.PlaybackState
@@ -40,7 +46,7 @@ fun MiniPlayer(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 8.dp)
-            .clickable(onClick = onClick),
+            .bouncyClickable(onClick = onClick),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -61,25 +67,36 @@ fun MiniPlayer(
                     .size(52.dp)
                     .clip(SquircleShape),
             )
-            Column(
+            // Crossfade + drift the labels on track change; capture the strings in the target
+            // so the outgoing content keeps showing the previous track while it animates away.
+            AnimatedContent(
+                targetState = Triple(state.currentMediaId, state.title.orEmpty(), state.artist.orEmpty()),
+                contentKey = { it.first },
+                transitionSpec = {
+                    (fadeIn() + slideInVertically { it / 4 }) togetherWith
+                        (fadeOut() + slideOutVertically { -it / 4 })
+                },
+                label = "miniTrack",
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = 12.dp),
-            ) {
-                Text(
-                    text = state.title.orEmpty(),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = state.artist.orEmpty(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            ) { (_, title, artist) ->
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = artist,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             val playInteraction = remember { MutableInteractionSource() }
             FilledIconButton(

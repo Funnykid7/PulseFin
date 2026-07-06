@@ -1,6 +1,5 @@
 package com.pulsefin.app.ui.library
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,26 +8,21 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
+import com.pulsefin.app.ui.components.MediaRow
+import com.pulsefin.app.ui.components.RefreshBox
+import com.pulsefin.app.ui.components.bouncyClickable
 import com.pulsefin.core.common.util.sizedArtUrl
 import com.pulsefin.core.domain.model.Artist
 import com.pulsefin.core.domain.repository.MediaRepository
@@ -51,7 +45,8 @@ class ArtistsViewModel(private val repository: MediaRepository) : ViewModel() {
 
     private fun sync(force: Boolean) {
         viewModelScope.launch {
-            isRefreshing = true
+            // Spinner only for user-initiated pulls; the silent startup sync shouldn't flash it.
+            if (force) isRefreshing = true
             repository.refreshLibrary(force = force)
             isRefreshing = false
         }
@@ -67,9 +62,10 @@ fun ArtistsScreen(
 ) {
     val artists by viewModel.artists.collectAsStateWithLifecycle()
 
-    PullToRefreshBox(
+    RefreshBox(
         isRefreshing = viewModel.isRefreshing,
         onRefresh = viewModel::refresh,
+        topPadding = contentPadding.calculateTopPadding(),
         modifier = Modifier.fillMaxSize(),
     ) {
         LazyColumn(
@@ -83,28 +79,19 @@ fun ArtistsScreen(
                     }
                 }
             } else {
-                items(artists, key = { it.id.value }) { artist ->
-                    ListItem(
-                        modifier = Modifier.clickable { onArtistClick(artist.id.value) },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        leadingContent = {
-                            AsyncImage(
-                                model = sizedArtUrl(artist.artworkUrl, 180),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .size(52.dp)
-                                    .clip(CircleShape),
-                            )
-                        },
-                        headlineContent = {
-                            Text(
-                                text = artist.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        },
+                items(
+                    artists,
+                    key = { it.id.value },
+                    contentType = { "artist" },
+                ) { artist ->
+                    MediaRow(
+                        title = artist.name,
+                        imageModel = sizedArtUrl(artist.artworkUrl, 180),
+                        modifier = Modifier
+                            .animateItem()
+                            .bouncyClickable { onArtistClick(artist.id.value) },
+                        imageSize = 52.dp,
+                        imageShape = CircleShape,
                     )
                 }
             }

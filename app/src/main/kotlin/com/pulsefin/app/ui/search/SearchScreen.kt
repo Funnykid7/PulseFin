@@ -1,12 +1,11 @@
 package com.pulsefin.app.ui.search
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -14,26 +13,27 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import coil.compose.AsyncImage
+import com.pulsefin.app.ui.components.MediaRow
+import com.pulsefin.app.ui.components.bouncyClickable
+import com.pulsefin.app.ui.components.pressScale
 import com.pulsefin.core.common.util.sizedArtUrl
 import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.common.result.PulseResult
@@ -94,7 +94,7 @@ class SearchViewModel(
 fun SearchScreen(
     contentPadding: PaddingValues,
     onBack: () -> Unit,
-    onAlbumClick: (String) -> Unit,
+    onAlbumClick: (id: String, artUrl: String?) -> Unit,
     onArtistClick: (String) -> Unit,
     viewModel: SearchViewModel = koinViewModel(),
 ) {
@@ -112,9 +112,17 @@ fun SearchScreen(
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
+            val backInteraction = remember { MutableInteractionSource() }
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier.pressScale(backInteraction, pressedScale = 0.9f),
+                interactionSource = backInteraction,
+            ) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
             }
+            // Focus the field as the screen animates in so the keyboard is ready to type.
+            val focusRequester = remember { FocusRequester() }
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
             TextField(
                 value = state.query,
                 onValueChange = viewModel::onQueryChange,
@@ -126,7 +134,9 @@ fun SearchScreen(
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                 ),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester),
             )
         }
 
@@ -160,7 +170,7 @@ fun SearchScreen(
                         subtitle = album.artistName,
                         artworkUrl = album.artworkUrl,
                         circle = false,
-                        onClick = { onAlbumClick(album.id.value) },
+                        onClick = { onAlbumClick(album.id.value, album.artworkUrl) },
                         modifier = Modifier.animateItem(),
                     )
                 }
@@ -202,26 +212,13 @@ private fun SongResultRow(song: Song, onClick: () -> Unit, modifier: Modifier = 
 
 @Composable
 private fun ResultRow(title: String, subtitle: String?, artworkUrl: String?, circle: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    ListItem(
-        modifier = modifier.clickable(onClick = onClick),
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        leadingContent = {
-            AsyncImage(
-                model = sizedArtUrl(artworkUrl, 180),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(if (circle) CircleShape else SquircleShape),
-            )
-        },
-        headlineContent = {
-            Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        },
-        supportingContent = subtitle?.let {
-            {
-                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        },
+    MediaRow(
+        title = title,
+        imageModel = sizedArtUrl(artworkUrl, 180),
+        modifier = modifier.bouncyClickable(onClick = onClick),
+        subtitle = subtitle,
+        imageSize = 48.dp,
+        imageShape = if (circle) CircleShape else SquircleShape,
+        titleStyle = MaterialTheme.typography.bodyLarge,
     )
 }

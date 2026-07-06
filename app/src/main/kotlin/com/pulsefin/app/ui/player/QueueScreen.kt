@@ -1,11 +1,11 @@
 package com.pulsefin.app.ui.player
 
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
@@ -13,8 +13,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -22,16 +20,15 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
-import com.pulsefin.core.designsystem.theme.SquircleShape
+import com.pulsefin.app.ui.components.MediaRow
+import com.pulsefin.app.ui.components.bouncyClickable
+import com.pulsefin.app.ui.components.pressScale
 import com.pulsefin.core.playback.controller.PlaybackController
 import org.koin.compose.koinInject
 
@@ -51,7 +48,12 @@ fun QueueScreen(
                 modifier = Modifier.padding(top = contentPadding.calculateTopPadding()),
                 title = { Text("Up Next") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    val backInteraction = remember { MutableInteractionSource() }
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.pressScale(backInteraction, pressedScale = 0.9f),
+                        interactionSource = backInteraction,
+                    ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -61,42 +63,27 @@ fun QueueScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
             ) {
-                itemsIndexed(queue, key = { i, item -> "$i-${item.mediaId}" }) { index, item ->
+                itemsIndexed(
+                    queue,
+                    key = { i, item -> "$i-${item.mediaId}" },
+                    contentType = { _, _ -> "queueItem" },
+                ) { index, item ->
                     val isCurrent = index == state.currentIndex
-                    ListItem(
+                    val titleColor by animateColorAsState(
+                        if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        label = "queueTitleColor",
+                    )
+                    MediaRow(
+                        title = item.title,
+                        imageModel = item.artworkUrl,
                         modifier = Modifier
                             .animateItem()
-                            .clickable { playbackController.playIndex(index) },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        leadingContent = {
-                            AsyncImage(
-                                model = item.artworkUrl,
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .clip(SquircleShape),
-                            )
-                        },
-                        headlineContent = {
-                            Text(
-                                text = item.title,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        },
-                        supportingContent = {
-                            Text(
-                                text = item.artist,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        },
+                            .bouncyClickable { playbackController.playIndex(index) },
+                        subtitle = item.artist,
+                        imageSize = 48.dp,
+                        titleStyle = MaterialTheme.typography.bodyLarge,
+                        titleColor = titleColor,
+                        titleWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
                     )
                 }
             }

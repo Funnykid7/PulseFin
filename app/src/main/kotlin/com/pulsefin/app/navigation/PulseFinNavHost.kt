@@ -1,11 +1,19 @@
 package com.pulsefin.app.navigation
 
+import android.net.Uri
+import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
@@ -30,9 +38,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.ui.unit.dp
+import com.pulsefin.app.ui.components.LocalNavAnimatedContentScope
+import com.pulsefin.app.ui.components.LocalSharedTransitionScope
 import com.pulsefin.app.ui.components.pressScale
 import com.pulsefin.core.designsystem.theme.searchShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -41,6 +52,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -67,13 +79,15 @@ object Routes {
     const val SONGS = "songs"
     const val ALBUMS = "albums"
     const val ARTISTS = "artists"
-    const val ALBUM_DETAIL = "album/{albumId}"
+    const val ALBUM_DETAIL = "album/{albumId}?art={art}"
     const val ARTIST_DETAIL = "artist/{artistId}"
     const val NOWPLAYING = "nowplaying"
     const val QUEUE = "queue"
     const val SEARCH = "search"
 
-    fun albumDetail(id: String) = "album/$id"
+    // The art URL rides along so the detail hero (and its shared-element morph + Monet theme)
+    // can render immediately instead of waiting for the track list to load from the server.
+    fun albumDetail(id: String, artUrl: String?) = "album/$id?art=${Uri.encode(artUrl.orEmpty())}"
     fun artistDetail(id: String) = "artist/$id"
 }
 
@@ -85,7 +99,7 @@ private val tabs = listOf(
     Tab(Routes.ARTISTS, "Artists", Icons.Filled.Person),
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun PulseFinNavHost(modifier: Modifier = Modifier) {
     val navController = rememberNavController()
@@ -123,9 +137,12 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                             Icon(Icons.Filled.Search, contentDescription = "Search")
                         }
                         Spacer(Modifier.width(8.dp))
+                        val signOutInteraction = remember { MutableInteractionSource() }
                         FilledTonalButton(
                             onClick = { scope.launch { authRepository.logout() } },
+                            modifier = Modifier.pressScale(signOutInteraction, pressedScale = 0.92f),
                             shape = CircleShape,
+                            interactionSource = signOutInteraction,
                         ) {
                             Text("Sign out")
                         }
@@ -159,6 +176,7 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                 ) {
                     NavigationBar {
                         tabs.forEach { tab ->
+                            val tabInteraction = remember { MutableInteractionSource() }
                             NavigationBarItem(
                                 selected = currentRoute == tab.route,
                                 onClick = {
@@ -172,6 +190,8 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                                 },
                                 icon = { Icon(tab.icon, contentDescription = tab.label) },
                                 label = { Text(tab.label) },
+                                modifier = Modifier.pressScale(tabInteraction, pressedScale = 0.9f),
+                                interactionSource = tabInteraction,
                             )
                         }
                     }
@@ -179,81 +199,109 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
             }
         },
     ) { innerPadding ->
-        NavHost(navController = navController, startDestination = Routes.SONGS) {
-            composable(Routes.SONGS) {
-                HomeScreen(contentPadding = innerPadding, currentMediaId = playbackState.currentMediaId)
-            }
-            composable(Routes.ALBUMS) {
-                AlbumsScreen(
-                    contentPadding = innerPadding,
-                    onAlbumClick = { navController.navigate(Routes.albumDetail(it)) },
-                )
-            }
-            composable(Routes.ARTISTS) {
-                ArtistsScreen(
-                    contentPadding = innerPadding,
-                    onArtistClick = { navController.navigate(Routes.artistDetail(it)) },
-                )
-            }
-            composable(
-                route = Routes.ALBUM_DETAIL,
-                arguments = listOf(navArgument("albumId") { type = NavType.StringType }),
-            ) { entry ->
-                AlbumDetailScreen(
-                    albumId = entry.arguments?.getString("albumId").orEmpty(),
-                    contentPadding = innerPadding,
-                    currentMediaId = playbackState.currentMediaId,
-                    onBack = { navController.popBackStack() },
-                )
-            }
-            composable(
-                route = Routes.ARTIST_DETAIL,
-                arguments = listOf(navArgument("artistId") { type = NavType.StringType }),
-            ) { entry ->
-                ArtistDetailScreen(
-                    artistId = entry.arguments?.getString("artistId").orEmpty(),
-                    contentPadding = innerPadding,
-                    onAlbumClick = { navController.navigate(Routes.albumDetail(it)) },
-                    onBack = { navController.popBackStack() },
-                )
-            }
-            composable(
-                Routes.NOWPLAYING,
-                enterTransition = { slideInVertically(initialOffsetY = { it }) + fadeIn() },
-                popExitTransition = { slideOutVertically(targetOffsetY = { it }) + fadeOut() },
-            ) {
-                NowPlayingScreen(
-                    contentPadding = innerPadding,
-                    onCollapse = { navController.popBackStack() },
-                    onOpenQueue = { navController.navigate(Routes.QUEUE) },
-                )
-            }
-            composable(
-                Routes.QUEUE,
-                enterTransition = { slideInVertically(initialOffsetY = { it }) + fadeIn() },
-                popExitTransition = { slideOutVertically(targetOffsetY = { it }) + fadeOut() },
-            ) {
-                QueueScreen(
-                    contentPadding = innerPadding,
-                    onBack = { navController.popBackStack() },
-                )
-            }
-            composable(
-                Routes.SEARCH,
-                enterTransition = {
-                    fadeIn() + scaleIn(initialScale = 0.92f, transformOrigin = TransformOrigin(0.9f, 0f))
-                },
-                popExitTransition = {
-                    fadeOut() + scaleOut(targetScale = 0.92f, transformOrigin = TransformOrigin(0.9f, 0f))
-                },
-            ) {
-                SearchScreen(
-                    contentPadding = innerPadding,
-                    onBack = { navController.popBackStack() },
-                    onAlbumClick = { navController.navigate(Routes.albumDetail(it)) },
-                    onArtistClick = { navController.navigate(Routes.artistDetail(it)) },
-                )
+        SharedTransitionLayout {
+            CompositionLocalProvider(LocalSharedTransitionScope provides this) {
+                NavHost(navController = navController, startDestination = Routes.SONGS) {
+                    composable(Routes.SONGS, enterTransition = tabEnter, exitTransition = tabExit) {
+                        HomeScreen(contentPadding = innerPadding, currentMediaId = playbackState.currentMediaId)
+                    }
+                    composable(Routes.ALBUMS, enterTransition = tabEnter, exitTransition = tabExit) {
+                        CompositionLocalProvider(LocalNavAnimatedContentScope provides this) {
+                            AlbumsScreen(
+                                contentPadding = innerPadding,
+                                onAlbumClick = { id, art -> navController.navigate(Routes.albumDetail(id, art)) },
+                            )
+                        }
+                    }
+                    composable(Routes.ARTISTS, enterTransition = tabEnter, exitTransition = tabExit) {
+                        ArtistsScreen(
+                            contentPadding = innerPadding,
+                            onArtistClick = { navController.navigate(Routes.artistDetail(it)) },
+                        )
+                    }
+                    composable(
+                        route = Routes.ALBUM_DETAIL,
+                        arguments = listOf(
+                            navArgument("albumId") { type = NavType.StringType },
+                            navArgument("art") {
+                                type = NavType.StringType
+                                defaultValue = ""
+                            },
+                        ),
+                        // Scale + fade: the shared-element art morph carries the spatial story.
+                        enterTransition = { fadeIn() + scaleIn(initialScale = 0.96f) },
+                        popExitTransition = { fadeOut() + scaleOut(targetScale = 0.96f) },
+                    ) { entry ->
+                        CompositionLocalProvider(LocalNavAnimatedContentScope provides this) {
+                            AlbumDetailScreen(
+                                albumId = entry.arguments?.getString("albumId").orEmpty(),
+                                initialArtUrl = entry.arguments?.getString("art")?.ifBlank { null },
+                                contentPadding = innerPadding,
+                                currentMediaId = playbackState.currentMediaId,
+                                onBack = { navController.popBackStack() },
+                            )
+                        }
+                    }
+                    composable(
+                        route = Routes.ARTIST_DETAIL,
+                        arguments = listOf(navArgument("artistId") { type = NavType.StringType }),
+                        enterTransition = { slideInHorizontally { it / 3 } + fadeIn() },
+                        popExitTransition = { slideOutHorizontally { it / 3 } + fadeOut() },
+                    ) { entry ->
+                        CompositionLocalProvider(LocalNavAnimatedContentScope provides this) {
+                            ArtistDetailScreen(
+                                artistId = entry.arguments?.getString("artistId").orEmpty(),
+                                contentPadding = innerPadding,
+                                onAlbumClick = { id, art -> navController.navigate(Routes.albumDetail(id, art)) },
+                                onBack = { navController.popBackStack() },
+                            )
+                        }
+                    }
+                    composable(
+                        Routes.NOWPLAYING,
+                        enterTransition = { slideInVertically(initialOffsetY = { it }) + fadeIn() },
+                        popExitTransition = { slideOutVertically(targetOffsetY = { it }) + fadeOut() },
+                    ) {
+                        NowPlayingScreen(
+                            contentPadding = innerPadding,
+                            onCollapse = { navController.popBackStack() },
+                            onOpenQueue = { navController.navigate(Routes.QUEUE) },
+                        )
+                    }
+                    composable(
+                        Routes.QUEUE,
+                        enterTransition = { slideInVertically(initialOffsetY = { it }) + fadeIn() },
+                        popExitTransition = { slideOutVertically(targetOffsetY = { it }) + fadeOut() },
+                    ) {
+                        QueueScreen(
+                            contentPadding = innerPadding,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable(
+                        Routes.SEARCH,
+                        enterTransition = {
+                            fadeIn() + scaleIn(initialScale = 0.92f, transformOrigin = TransformOrigin(0.9f, 0f))
+                        },
+                        popExitTransition = {
+                            fadeOut() + scaleOut(targetScale = 0.92f, transformOrigin = TransformOrigin(0.9f, 0f))
+                        },
+                    ) {
+                        SearchScreen(
+                            contentPadding = innerPadding,
+                            onBack = { navController.popBackStack() },
+                            onAlbumClick = { id, art -> navController.navigate(Routes.albumDetail(id, art)) },
+                            onArtistClick = { navController.navigate(Routes.artistDetail(it)) },
+                        )
+                    }
+                }
             }
         }
     }
 }
+
+// Tab switches use a shared fade-through so Songs/Albums/Artists glide instead of hard-cutting.
+private val tabEnter: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition =
+    { fadeIn() + scaleIn(initialScale = 0.96f) }
+private val tabExit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition =
+    { fadeOut() }

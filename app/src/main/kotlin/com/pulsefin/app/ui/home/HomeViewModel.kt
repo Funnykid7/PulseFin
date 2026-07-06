@@ -30,7 +30,8 @@ class HomeViewModel(
 
     private fun sync(force: Boolean) {
         viewModelScope.launch {
-            isRefreshing = true
+            // Spinner only for user-initiated pulls; the silent startup sync shouldn't flash it.
+            if (force) isRefreshing = true
             repository.refreshLibrary(force = force)
             isRefreshing = false
         }

@@ -1,6 +1,7 @@
 package com.pulsefin.app.ui.library
 
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +40,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
+import com.pulsefin.app.ui.components.bouncyClickable
+import com.pulsefin.app.ui.components.pressScale
+import com.pulsefin.app.ui.components.sharedArtwork
 import com.pulsefin.core.common.util.sizedArtUrl
 import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.common.result.PulseResult
@@ -76,7 +81,7 @@ class ArtistDetailViewModel(private val repository: MediaRepository) : ViewModel
 fun ArtistDetailScreen(
     artistId: String,
     contentPadding: PaddingValues,
-    onAlbumClick: (String) -> Unit,
+    onAlbumClick: (id: String, artUrl: String?) -> Unit,
     onBack: () -> Unit,
     viewModel: ArtistDetailViewModel = koinViewModel(),
 ) {
@@ -90,47 +95,70 @@ fun ArtistDetailScreen(
                 modifier = Modifier.padding(top = contentPadding.calculateTopPadding()),
                 title = { Text(artistName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    val backInteraction = remember { MutableInteractionSource() }
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.pressScale(backInteraction, pressedScale = 0.9f),
+                        interactionSource = backInteraction,
+                    ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
             )
-            when {
-                state.isLoading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-                state.error != null -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                    Text(state.error, color = MaterialTheme.colorScheme.error)
-                }
-                else -> LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = 12.dp,
-                        end = 12.dp,
-                        top = 8.dp,
-                        bottom = contentPadding.calculateBottomPadding() + 8.dp,
-                    ),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    items(state.albums, key = { it.id.value }) { album ->
-                        Column(modifier = Modifier.clickable { onAlbumClick(album.id.value) }) {
-                            AsyncImage(
-                                model = sizedArtUrl(album.artworkUrl, 180),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
+            val phase = when {
+                state.isLoading -> 0
+                state.error != null -> 1
+                else -> 2
+            }
+            Crossfade(targetState = phase, label = "artistDetailContent") { p ->
+                when (p) {
+                    0 -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
+                    1 -> Box(Modifier.fillMaxSize(), Alignment.Center) {
+                        Text(state.error.orEmpty(), color = MaterialTheme.colorScheme.error)
+                    }
+                    else -> LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            start = 12.dp,
+                            end = 12.dp,
+                            top = 8.dp,
+                            bottom = contentPadding.calculateBottomPadding() + 8.dp,
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        items(
+                            state.albums,
+                            key = { it.id.value },
+                            contentType = { "album" },
+                        ) { album ->
+                            Column(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .aspectRatio(1f)
-                                    .clip(SquircleShape),
-                            )
-                            Text(
-                                text = album.name,
-                                style = MaterialTheme.typography.titleSmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = 6.dp),
-                            )
+                                    .animateItem()
+                                    .bouncyClickable(pressedScale = 0.95f) {
+                                        onAlbumClick(album.id.value, album.artworkUrl)
+                                    },
+                            ) {
+                                AsyncImage(
+                                    model = sizedArtUrl(album.artworkUrl, 180),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .sharedArtwork("album-art-${album.id.value}")
+                                        .fillMaxWidth()
+                                        .aspectRatio(1f)
+                                        .clip(SquircleShape),
+                                )
+                                Text(
+                                    text = album.name,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(top = 6.dp),
+                                )
+                            }
                         }
                     }
                 }

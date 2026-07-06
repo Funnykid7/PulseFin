@@ -1,5 +1,10 @@
 package com.pulsefin.app.ui.root
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -25,16 +30,24 @@ fun PulseFinRoot(modifier: Modifier = Modifier) {
         initialValue = AuthState.Unknown,
     )
 
-    when (authState) {
-        AuthState.Unknown -> Box(
-            modifier = modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
-            CircularProgressIndicator()
+    AnimatedContent(
+        targetState = authState,
+        transitionSpec = { (fadeIn() + scaleIn(initialScale = 0.96f)) togetherWith fadeOut() },
+        // Key by state type so session refreshes inside LoggedIn don't replay the transition.
+        contentKey = { it::class },
+        label = "authGate",
+    ) { state ->
+        when (state) {
+            AuthState.Unknown -> Box(
+                modifier = modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator()
+            }
+
+            AuthState.LoggedOut -> LoginScreen()
+
+            is AuthState.LoggedIn -> PulseFinNavHost(modifier = modifier)
         }
-
-        AuthState.LoggedOut -> LoginScreen()
-
-        is AuthState.LoggedIn -> PulseFinNavHost(modifier = modifier)
     }
 }

@@ -1,6 +1,5 @@
 package com.pulsefin.app.ui.library
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,7 +16,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,6 +30,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.pulsefin.app.ui.components.RefreshBox
+import com.pulsefin.app.ui.components.bouncyClickable
+import com.pulsefin.app.ui.components.sharedArtwork
 import com.pulsefin.core.common.util.sizedArtUrl
 import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.domain.model.Album
@@ -55,7 +56,8 @@ class AlbumsViewModel(private val repository: MediaRepository) : ViewModel() {
 
     private fun sync(force: Boolean) {
         viewModelScope.launch {
-            isRefreshing = true
+            // Spinner only for user-initiated pulls; the silent startup sync shouldn't flash it.
+            if (force) isRefreshing = true
             repository.refreshLibrary(force = force)
             isRefreshing = false
         }
@@ -66,14 +68,15 @@ class AlbumsViewModel(private val repository: MediaRepository) : ViewModel() {
 @Composable
 fun AlbumsScreen(
     contentPadding: PaddingValues,
-    onAlbumClick: (String) -> Unit,
+    onAlbumClick: (id: String, artUrl: String?) -> Unit,
     viewModel: AlbumsViewModel = koinViewModel(),
 ) {
     val albums by viewModel.albums.collectAsStateWithLifecycle()
 
-    PullToRefreshBox(
+    RefreshBox(
         isRefreshing = viewModel.isRefreshing,
         onRefresh = viewModel::refresh,
+        topPadding = contentPadding.calculateTopPadding(),
         modifier = Modifier.fillMaxSize(),
     ) {
         LazyVerticalGrid(
@@ -100,8 +103,16 @@ fun AlbumsScreen(
                     }
                 }
             } else {
-                items(albums, key = { it.id.value }) { album ->
-                    AlbumCard(album = album, onClick = { onAlbumClick(album.id.value) })
+                items(
+                    albums,
+                    key = { it.id.value },
+                    contentType = { "album" },
+                ) { album ->
+                    AlbumCard(
+                        album = album,
+                        onClick = { onAlbumClick(album.id.value, album.artworkUrl) },
+                        modifier = Modifier.animateItem(),
+                    )
                 }
             }
         }
@@ -109,13 +120,16 @@ fun AlbumsScreen(
 }
 
 @Composable
-private fun AlbumCard(album: Album, onClick: () -> Unit) {
-    Column(modifier = Modifier.clickable(onClick = onClick)) {
+private fun AlbumCard(album: Album, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.bouncyClickable(pressedScale = 0.95f, onClick = onClick),
+    ) {
         AsyncImage(
             model = sizedArtUrl(album.artworkUrl, 180),
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier
+                .sharedArtwork("album-art-${album.id.value}")
                 .fillMaxWidth()
                 .aspectRatio(1f)
                 .clip(SquircleShape),

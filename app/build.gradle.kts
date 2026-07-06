@@ -23,6 +23,10 @@ android {
             applicationIdSuffix = ".debug"
         }
         release {
+            // Debug-signed so the optimized build installs on local test devices
+            // (no store publishing configured yet). Real perf testing happens here —
+            // debug builds skip R8 and the baseline profile.
+            signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

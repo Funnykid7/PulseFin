@@ -1,6 +1,9 @@
 package com.pulsefin.app.ui.player
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -36,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
@@ -105,16 +109,35 @@ private fun NowPlayingContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            IconButton(onClick = onCollapse) {
+            val collapseInteraction = remember { MutableInteractionSource() }
+            IconButton(
+                onClick = onCollapse,
+                modifier = Modifier.pressScale(collapseInteraction, pressedScale = 0.9f),
+                interactionSource = collapseInteraction,
+            ) {
                 Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Collapse")
             }
-            IconButton(onClick = onOpenQueue) {
+            val queueInteraction = remember { MutableInteractionSource() }
+            IconButton(
+                onClick = onOpenQueue,
+                modifier = Modifier.pressScale(queueInteraction, pressedScale = 0.9f),
+                interactionSource = queueInteraction,
+            ) {
                 Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = "Queue")
             }
         }
 
         Spacer(Modifier.weight(1f))
 
+        // The art breathes with playback: full size while playing, gently recedes when paused.
+        val artScale by animateFloatAsState(
+            targetValue = if (state.isPlaying) 1f else 0.94f,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessLow,
+            ),
+            label = "artScale",
+        )
         AsyncImage(
             model = state.artworkUrl,
             contentDescription = null,
@@ -122,6 +145,10 @@ private fun NowPlayingContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
+                .graphicsLayer {
+                    scaleX = artScale
+                    scaleY = artScale
+                }
                 .clip(RoundedHeroShape),
         )
 

@@ -1,32 +1,24 @@
 package com.pulsefin.app.ui.home
 
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
+import com.pulsefin.app.ui.components.MediaRow
+import com.pulsefin.app.ui.components.RefreshBox
+import com.pulsefin.app.ui.components.bouncyClickable
 import com.pulsefin.core.common.util.sizedArtUrl
-import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.domain.model.Song
 import org.koin.androidx.compose.koinViewModel
 
@@ -43,9 +35,10 @@ fun HomeScreen(
 ) {
     val songs by viewModel.songs.collectAsStateWithLifecycle()
 
-    PullToRefreshBox(
+    RefreshBox(
         isRefreshing = viewModel.isRefreshing,
         onRefresh = viewModel::refresh,
+        topPadding = contentPadding.calculateTopPadding(),
         modifier = Modifier.fillMaxSize(),
     ) {
         LazyColumn(
@@ -62,11 +55,16 @@ fun HomeScreen(
                     }
                 }
             } else {
-                itemsIndexed(songs, key = { _, song -> song.id.value }) { index, song ->
+                itemsIndexed(
+                    songs,
+                    key = { _, song -> song.id.value },
+                    contentType = { _, _ -> "song" },
+                ) { index, song ->
                     SongRow(
                         song = song,
                         isPlaying = song.id.value == currentMediaId,
                         onClick = { viewModel.onSongClick(index) },
+                        modifier = Modifier.animateItem(),
                     )
                 }
             }
@@ -75,47 +73,25 @@ fun HomeScreen(
 }
 
 @Composable
-private fun SongRow(song: Song, isPlaying: Boolean, onClick: () -> Unit) {
+private fun SongRow(song: Song, isPlaying: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val accent = MaterialTheme.colorScheme.primary
-    ListItem(
-        modifier = Modifier.clickable(onClick = onClick),
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        leadingContent = {
-            AsyncImage(
-                model = sizedArtUrl(song.artworkUrl, 180),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(SquircleShape),
-            )
-        },
-        headlineContent = {
-            Text(
-                text = song.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.Medium,
-                color = if (isPlaying) accent else MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        },
-        supportingContent = {
-            Text(
-                text = song.artistName,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        },
-        trailingContent = {
-            Text(
-                text = formatDuration(song.durationMs),
-                style = MaterialTheme.typography.labelMedium,
-                color = if (isPlaying) accent else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        },
+    val titleColor by animateColorAsState(
+        if (isPlaying) accent else MaterialTheme.colorScheme.onSurface,
+        label = "songTitleColor",
+    )
+    val trailingColor by animateColorAsState(
+        if (isPlaying) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+        label = "songTrailingColor",
+    )
+    MediaRow(
+        title = song.title,
+        imageModel = sizedArtUrl(song.artworkUrl, 180),
+        modifier = modifier.bouncyClickable(onClick = onClick),
+        subtitle = song.artistName,
+        titleColor = titleColor,
+        titleWeight = if (isPlaying) FontWeight.Bold else FontWeight.Medium,
+        trailingText = formatDuration(song.durationMs),
+        trailingColor = trailingColor,
     )
 }
 

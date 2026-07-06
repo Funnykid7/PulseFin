@@ -21,6 +21,8 @@ import com.materialkolor.dynamiccolor.DynamicColor
 import com.materialkolor.dynamiccolor.MaterialDynamicColors
 import com.materialkolor.hct.Hct
 import com.materialkolor.scheme.SchemeTonalSpot
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Re-themes [content] to a Material 3 tonal (Monet) scheme derived from the given album art.
@@ -44,8 +46,12 @@ fun rememberArtworkColorScheme(artworkUrl: String?): ColorScheme? {
     val context = LocalContext.current
     var scheme by remember(artworkUrl) { mutableStateOf<ColorScheme?>(null) }
     LaunchedEffect(artworkUrl) {
+        // Palette quantization + tonal-scheme build are tens of ms of CPU — keep them off
+        // the main thread so track changes don't hitch the UI.
         scheme = artworkUrl?.let { url ->
-            extractSeedColor(context, url)?.let(::schemeFromSeed)
+            withContext(Dispatchers.Default) {
+                extractSeedColor(context, url)?.let(::schemeFromSeed)
+            }
         }
     }
     return scheme
