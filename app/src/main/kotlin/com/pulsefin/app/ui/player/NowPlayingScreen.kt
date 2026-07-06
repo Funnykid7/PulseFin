@@ -1,8 +1,10 @@
 package com.pulsefin.app.ui.player
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,8 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
@@ -32,6 +32,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,6 +43,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.pulsefin.app.ui.components.AnimatedPlayPauseIcon
+import com.pulsefin.app.ui.components.pressScale
 import com.pulsefin.app.ui.theme.ArtworkTheme
 import com.pulsefin.core.designsystem.theme.RoundedHeroShape
 import com.pulsefin.core.designsystem.theme.cookieShape
@@ -156,19 +159,38 @@ private fun NowPlayingContent(
 
         Spacer(Modifier.size(16.dp))
 
+        val shuffleTint by animateColorAsState(
+            if (state.shuffleEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            label = "shuffleTint",
+        )
+        val repeatTint by animateColorAsState(
+            if (state.isRepeatActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            label = "repeatTint",
+        )
+        val shuffleInteraction = remember { MutableInteractionSource() }
+        val prevInteraction = remember { MutableInteractionSource() }
+        val playInteraction = remember { MutableInteractionSource() }
+        val nextInteraction = remember { MutableInteractionSource() }
+        val repeatInteraction = remember { MutableInteractionSource() }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = playbackController::toggleShuffle) {
-                Icon(
-                    Icons.Filled.Shuffle,
-                    contentDescription = "Shuffle",
-                    tint = if (state.shuffleEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            IconButton(
+                onClick = playbackController::toggleShuffle,
+                modifier = Modifier.pressScale(shuffleInteraction),
+                interactionSource = shuffleInteraction,
+            ) {
+                Icon(Icons.Filled.Shuffle, contentDescription = "Shuffle", tint = shuffleTint)
             }
-            IconButton(onClick = playbackController::previous, enabled = state.hasPrevious) {
+            IconButton(
+                onClick = playbackController::previous,
+                enabled = state.hasPrevious,
+                modifier = Modifier.pressScale(prevInteraction),
+                interactionSource = prevInteraction,
+            ) {
                 Icon(
                     Icons.Filled.SkipPrevious,
                     contentDescription = "Previous",
@@ -177,28 +199,40 @@ private fun NowPlayingContent(
             }
             FilledIconButton(
                 onClick = playbackController::togglePlayPause,
-                modifier = Modifier.size(72.dp),
+                modifier = Modifier
+                    .size(72.dp)
+                    .pressScale(playInteraction),
                 shape = cookieShape(),
                 colors = IconButtonDefaults.filledIconButtonColors(),
+                interactionSource = playInteraction,
             ) {
-                Icon(
-                    imageVector = if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                AnimatedPlayPauseIcon(
+                    isPlaying = state.isPlaying,
                     contentDescription = if (state.isPlaying) "Pause" else "Play",
                     modifier = Modifier.size(36.dp),
                 )
             }
-            IconButton(onClick = playbackController::next, enabled = state.hasNext) {
+            IconButton(
+                onClick = playbackController::next,
+                enabled = state.hasNext,
+                modifier = Modifier.pressScale(nextInteraction),
+                interactionSource = nextInteraction,
+            ) {
                 Icon(
                     Icons.Filled.SkipNext,
                     contentDescription = "Next",
                     modifier = Modifier.size(36.dp),
                 )
             }
-            IconButton(onClick = playbackController::cycleRepeat) {
+            IconButton(
+                onClick = playbackController::cycleRepeat,
+                modifier = Modifier.pressScale(repeatInteraction),
+                interactionSource = repeatInteraction,
+            ) {
                 Icon(
                     imageVector = if (state.isRepeatOne) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
                     contentDescription = "Repeat",
-                    tint = if (state.isRepeatActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = repeatTint,
                 )
             }
         }

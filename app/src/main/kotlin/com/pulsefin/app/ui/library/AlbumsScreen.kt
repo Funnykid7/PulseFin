@@ -112,7 +112,7 @@ fun AlbumsScreen(
 private fun AlbumCard(album: Album, onClick: () -> Unit) {
     Column(modifier = Modifier.clickable(onClick = onClick)) {
         AsyncImage(
-            model = sizedArtUrl(album.artworkUrl, 320),
+            model = sizedArtUrl(album.artworkUrl, 180),
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier

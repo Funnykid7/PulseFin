@@ -126,7 +126,11 @@ fun AlbumDetailScreen(
                                 onPlay = { viewModel.play(0) },
                             )
                         }
-                        itemsIndexed(state.tracks, key = { _, s -> s.id.value }) { index, song ->
+                        itemsIndexed(
+                            state.tracks,
+                            key = { _, s -> s.id.value },
+                            contentType = { _, _ -> "track" },
+                        ) { index, song ->
                             TrackRow(
                                 index = index + 1,
                                 song = song,

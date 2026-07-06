@@ -64,7 +64,9 @@ fun QueueScreen(
                 itemsIndexed(queue, key = { i, item -> "$i-${item.mediaId}" }) { index, item ->
                     val isCurrent = index == state.currentIndex
                     ListItem(
-                        modifier = Modifier.clickable { playbackController.playIndex(index) },
+                        modifier = Modifier
+                            .animateItem()
+                            .clickable { playbackController.playIndex(index) },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                         leadingContent = {
                             AsyncImage(

@@ -116,7 +116,7 @@ fun ArtistDetailScreen(
                     items(state.albums, key = { it.id.value }) { album ->
                         Column(modifier = Modifier.clickable { onAlbumClick(album.id.value) }) {
                             AsyncImage(
-                                model = sizedArtUrl(album.artworkUrl, 320),
+                                model = sizedArtUrl(album.artworkUrl, 180),
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier

@@ -136,31 +136,49 @@ fun SearchScreen(
         ) {
             if (results.songs.isNotEmpty()) {
                 item { SectionHeader("Songs") }
-                itemsIndexed(results.songs, key = { _, s -> "s-${s.id.value}" }) { index, song ->
-                    SongResultRow(song = song, onClick = { viewModel.playSong(index) })
+                itemsIndexed(
+                    results.songs,
+                    key = { _, s -> "s-${s.id.value}" },
+                    contentType = { _, _ -> "song" },
+                ) { index, song ->
+                    SongResultRow(
+                        song = song,
+                        onClick = { viewModel.playSong(index) },
+                        modifier = Modifier.animateItem(),
+                    )
                 }
             }
             if (results.albums.isNotEmpty()) {
                 item { SectionHeader("Albums") }
-                itemsIndexed(results.albums, key = { _, a -> "al-${a.id.value}" }) { _, album ->
+                itemsIndexed(
+                    results.albums,
+                    key = { _, a -> "al-${a.id.value}" },
+                    contentType = { _, _ -> "result" },
+                ) { _, album ->
                     ResultRow(
                         title = album.name,
                         subtitle = album.artistName,
                         artworkUrl = album.artworkUrl,
                         circle = false,
                         onClick = { onAlbumClick(album.id.value) },
+                        modifier = Modifier.animateItem(),
                     )
                 }
             }
             if (results.artists.isNotEmpty()) {
                 item { SectionHeader("Artists") }
-                itemsIndexed(results.artists, key = { _, a -> "ar-${a.id.value}" }) { _, artist ->
+                itemsIndexed(
+                    results.artists,
+                    key = { _, a -> "ar-${a.id.value}" },
+                    contentType = { _, _ -> "result" },
+                ) { _, artist ->
                     ResultRow(
                         title = artist.name,
                         subtitle = null,
                         artworkUrl = artist.artworkUrl,
                         circle = true,
                         onClick = { onArtistClick(artist.id.value) },
+                        modifier = Modifier.animateItem(),
                     )
                 }
             }
@@ -179,13 +197,13 @@ private fun SectionHeader(text: String) {
 }
 
 @Composable
-private fun SongResultRow(song: Song, onClick: () -> Unit) =
-    ResultRow(title = song.title, subtitle = song.artistName, artworkUrl = song.artworkUrl, circle = false, onClick = onClick)
+private fun SongResultRow(song: Song, onClick: () -> Unit, modifier: Modifier = Modifier) =
+    ResultRow(title = song.title, subtitle = song.artistName, artworkUrl = song.artworkUrl, circle = false, onClick = onClick, modifier = modifier)
 
 @Composable
-private fun ResultRow(title: String, subtitle: String?, artworkUrl: String?, circle: Boolean, onClick: () -> Unit) {
+private fun ResultRow(title: String, subtitle: String?, artworkUrl: String?, circle: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     ListItem(
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = modifier.clickable(onClick = onClick),
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         leadingContent = {
             AsyncImage(

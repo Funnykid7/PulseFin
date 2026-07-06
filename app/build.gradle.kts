@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.androidx.baselineprofile)
 }
 
 android {
@@ -47,6 +48,14 @@ kotlin {
     }
 }
 
+composeCompiler {
+    // Treat the immutable domain models (and the List snapshots we pass around) as stable
+    // so list rows can be skipped during scroll instead of recomposing every pass.
+    stabilityConfigurationFiles.add(
+        rootProject.layout.projectDirectory.file("compose_stability.conf")
+    )
+}
+
 dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:domain"))
@@ -71,6 +80,10 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
 
     implementation(libs.coil.compose)
+
+    // Baseline Profile: ships the AOT profile in the APK; the :baselineprofile module generates it.
+    implementation(libs.androidx.profileinstaller)
+    baselineProfile(project(":baselineprofile"))
 
     // Per-screen Monet: extract a seed from album art (Palette) and build a tonal scheme.
     implementation(libs.androidx.palette.ktx)

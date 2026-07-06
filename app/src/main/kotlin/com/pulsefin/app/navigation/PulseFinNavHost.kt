@@ -1,5 +1,13 @@
 package com.pulsefin.app.navigation
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -22,11 +30,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.ui.unit.dp
+import com.pulsefin.app.ui.components.pressScale
 import com.pulsefin.core.designsystem.theme.searchShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -102,9 +113,12 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                         Text(currentTab?.label ?: "PulseFin", color = MaterialTheme.colorScheme.primary)
                     },
                     actions = {
+                        val searchInteraction = remember { MutableInteractionSource() }
                         FilledTonalIconButton(
                             onClick = { navController.navigate(Routes.SEARCH) },
+                            modifier = Modifier.pressScale(searchInteraction),
                             shape = searchShape(),
+                            interactionSource = searchInteraction,
                         ) {
                             Icon(Icons.Filled.Search, contentDescription = "Search")
                         }
@@ -125,7 +139,11 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
             // Mini-player stacks above the tab bar. The NavigationBar consumes the system
             // inset on tab routes; on detail routes there's no NavigationBar, so pad the column.
             Column(modifier = if (isTab) Modifier else Modifier.navigationBarsPadding()) {
-                if (playbackState.hasItem && !isFullScreen) {
+                AnimatedVisibility(
+                    visible = playbackState.hasItem && !isFullScreen,
+                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                ) {
                     ArtworkTheme(playbackState.artworkUrl) {
                         MiniPlayer(
                             state = playbackState,
@@ -134,7 +152,11 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                         )
                     }
                 }
-                if (isTab) {
+                AnimatedVisibility(
+                    visible = isTab,
+                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                ) {
                     NavigationBar {
                         tabs.forEach { tab ->
                             NavigationBarItem(
@@ -195,20 +217,36 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                     onBack = { navController.popBackStack() },
                 )
             }
-            composable(Routes.NOWPLAYING) {
+            composable(
+                Routes.NOWPLAYING,
+                enterTransition = { slideInVertically(initialOffsetY = { it }) + fadeIn() },
+                popExitTransition = { slideOutVertically(targetOffsetY = { it }) + fadeOut() },
+            ) {
                 NowPlayingScreen(
                     contentPadding = innerPadding,
                     onCollapse = { navController.popBackStack() },
                     onOpenQueue = { navController.navigate(Routes.QUEUE) },
                 )
             }
-            composable(Routes.QUEUE) {
+            composable(
+                Routes.QUEUE,
+                enterTransition = { slideInVertically(initialOffsetY = { it }) + fadeIn() },
+                popExitTransition = { slideOutVertically(targetOffsetY = { it }) + fadeOut() },
+            ) {
                 QueueScreen(
                     contentPadding = innerPadding,
                     onBack = { navController.popBackStack() },
                 )
             }
-            composable(Routes.SEARCH) {
+            composable(
+                Routes.SEARCH,
+                enterTransition = {
+                    fadeIn() + scaleIn(initialScale = 0.92f, transformOrigin = TransformOrigin(0.9f, 0f))
+                },
+                popExitTransition = {
+                    fadeOut() + scaleOut(targetScale = 0.92f, transformOrigin = TransformOrigin(0.9f, 0f))
+                },
+            ) {
                 SearchScreen(
                     contentPadding = innerPadding,
                     onBack = { navController.popBackStack() },
