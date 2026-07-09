@@ -10,6 +10,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -40,6 +41,30 @@ fun ArtworkTheme(artworkUrl: String?, content: @Composable () -> Unit) {
         content = content,
     )
 }
+
+/**
+ * Themes [content] from the scheme already hoisted into [LocalArtworkColorScheme]. Use this for
+ * surfaces that share the currently-playing track's palette (mini-player, now-playing) so the
+ * scheme is extracted once and stays put across mount/unmount — no re-extraction snap on every
+ * expand/collapse of the player.
+ */
+@Composable
+fun ArtworkTheme(content: @Composable () -> Unit) {
+    val scheme = LocalArtworkColorScheme.current
+    MaterialTheme(
+        colorScheme = scheme ?: MaterialTheme.colorScheme,
+        typography = MaterialTheme.typography,
+        shapes = MaterialTheme.shapes,
+        content = content,
+    )
+}
+
+/**
+ * The Monet scheme of the currently-playing track's art, hoisted so it survives recomposition.
+ * Non-static so a track change recomposes only the readers (mini-player, now-playing), not the
+ * whole nav-host subtree.
+ */
+val LocalArtworkColorScheme = compositionLocalOf<ColorScheme?> { null }
 
 @Composable
 fun rememberArtworkColorScheme(artworkUrl: String?): ColorScheme? {

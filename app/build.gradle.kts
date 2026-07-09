@@ -60,6 +60,12 @@ composeCompiler {
     )
 }
 
+baselineProfile {
+    // Skip automatic generation during local builds to keep build times fast.
+    // Profiles should be generated manually when needed.
+    automaticGenerationDuringBuild = false
+}
+
 dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:domain"))

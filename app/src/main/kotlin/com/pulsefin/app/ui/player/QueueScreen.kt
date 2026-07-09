@@ -4,8 +4,12 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
@@ -35,17 +39,21 @@ import org.koin.compose.koinInject
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QueueScreen(
-    contentPadding: PaddingValues,
     onBack: () -> Unit,
     playbackController: PlaybackController = koinInject(),
 ) {
     val queue by playbackController.queue.collectAsStateWithLifecycle()
     val state by playbackController.state.collectAsStateWithLifecycle()
 
+    // Stable system-bar insets, not the Scaffold's contentPadding: the bottom bar's height snaps in
+    // one frame when it slides out, which would jerk this full-screen list as the transition settles.
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
             TopAppBar(
-                modifier = Modifier.padding(top = contentPadding.calculateTopPadding()),
+                modifier = Modifier.padding(top = topInset),
                 title = { Text("Up Next") },
                 navigationIcon = {
                     val backInteraction = remember { MutableInteractionSource() }
@@ -61,7 +69,7 @@ fun QueueScreen(
             )
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
+                contentPadding = PaddingValues(bottom = bottomInset),
             ) {
                 itemsIndexed(
                     queue,

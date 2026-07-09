@@ -30,15 +30,14 @@ class BaselineProfileGenerator {
         device.waitForIdle()
 
         // Fling the Songs list a few times each way if it's on screen (i.e. we're logged in).
-        val list = device.wait(Until.findObject(By.scrollable(true)), 5_000)
-        if (list != null) {
-            list.setGestureMargin(device.displayWidth / 5)
-            repeat(3) {
-                list.fling(Direction.DOWN)
-                device.waitForIdle()
-            }
-            repeat(3) {
-                list.fling(Direction.UP)
+        // Re-find the scrollable before every fling: the library loads asynchronously and can
+        // swap the list node between flings, which invalidates a cached UiObject2 (StaleObject-
+        // Exception). Re-querying keeps generation reliable.
+        if (device.wait(Until.hasObject(By.scrollable(true)), 5_000)) {
+            repeat(6) { i ->
+                val list = device.findObject(By.scrollable(true)) ?: return@repeat
+                list.setGestureMargin(device.displayWidth / 5)
+                list.fling(if (i < 3) Direction.DOWN else Direction.UP)
                 device.waitForIdle()
             }
         }

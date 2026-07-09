@@ -70,6 +70,8 @@ import com.pulsefin.app.ui.player.NowPlayingScreen
 import com.pulsefin.app.ui.player.QueueScreen
 import com.pulsefin.app.ui.search.SearchScreen
 import com.pulsefin.app.ui.theme.ArtworkTheme
+import com.pulsefin.app.ui.theme.LocalArtworkColorScheme
+import com.pulsefin.app.ui.theme.rememberArtworkColorScheme
 import com.pulsefin.core.domain.repository.AuthRepository
 import com.pulsefin.core.playback.controller.PlaybackController
 import kotlinx.coroutines.launch
@@ -117,6 +119,12 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
     val isTab = currentTab != null
     val isFullScreen = currentRoute == Routes.NOWPLAYING || currentRoute == Routes.QUEUE
 
+    // Extract the current track's Monet scheme once, here, so the mini-player and the now-playing
+    // screen share it. Hoisting keeps it alive across the mini-player's mount/unmount and across
+    // the expand/collapse transition, so the palette never re-extracts and snaps mid-animation.
+    val artworkScheme = rememberArtworkColorScheme(playbackState.artworkUrl)
+
+    CompositionLocalProvider(LocalArtworkColorScheme provides artworkScheme) {
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = MaterialTheme.colorScheme.background,
@@ -161,7 +169,7 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                     enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                     exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
                 ) {
-                    ArtworkTheme(playbackState.artworkUrl) {
+                    ArtworkTheme {
                         MiniPlayer(
                             state = playbackState,
                             onTogglePlayPause = playbackController::togglePlayPause,
@@ -263,7 +271,6 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                         popExitTransition = { slideOutVertically(targetOffsetY = { it }) + fadeOut() },
                     ) {
                         NowPlayingScreen(
-                            contentPadding = innerPadding,
                             onCollapse = { navController.popBackStack() },
                             onOpenQueue = { navController.navigate(Routes.QUEUE) },
                         )
@@ -274,7 +281,6 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                         popExitTransition = { slideOutVertically(targetOffsetY = { it }) + fadeOut() },
                     ) {
                         QueueScreen(
-                            contentPadding = innerPadding,
                             onBack = { navController.popBackStack() },
                         )
                     }
@@ -297,6 +303,7 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                 }
             }
         }
+    }
     }
 }
 
