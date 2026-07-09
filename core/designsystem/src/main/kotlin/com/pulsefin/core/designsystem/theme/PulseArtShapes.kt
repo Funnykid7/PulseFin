@@ -23,3 +23,16 @@ fun cookieShape(): Shape = MaterialShapes.Cookie9Sided.toShape()
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun searchShape(): Shape = MaterialShapes.Clover4Leaf.toShape()
+
+/**
+ * A small set of distinct organic "blob" shapes for the Home hero art cluster — each thumbnail
+ * gets a different one so the cluster reads as playful without any single shape dominating.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun blobShapes(): List<Shape> = listOf(
+    MaterialShapes.Cookie7Sided.toShape(),
+    MaterialShapes.Clover4Leaf.toShape(),
+    MaterialShapes.Sunny.toShape(),
+    MaterialShapes.Pill.toShape(),
+)

@@ -31,4 +31,18 @@ data class Song(
     val artworkUrl: String? = null,
     /** Direct-play stream URL resolved from the Jellyfin server. */
     val streamUrl: String? = null,
+    val isFavorite: Boolean = false,
 )
+
+/** One line of lyrics; [startMs] is null for unsynced (plain-text) lyrics. */
+data class LyricLine(
+    val startMs: Long?,
+    val text: String,
+)
+
+data class Lyrics(val lines: List<LyricLine>) {
+    val isEmpty: Boolean get() = lines.isEmpty()
+
+    /** True when at least one line is time-stamped, so a synced view is meaningful. */
+    val isSynced: Boolean get() = lines.any { it.startMs != null }
+}

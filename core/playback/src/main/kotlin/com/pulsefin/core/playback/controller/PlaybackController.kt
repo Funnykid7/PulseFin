@@ -15,6 +15,7 @@ import com.pulsefin.core.domain.model.Song
 import com.pulsefin.core.playback.service.PlaybackService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,6 +69,11 @@ class PlaybackController(private val context: Context) {
 
     private val _queue = MutableStateFlow<List<QueueItem>>(emptyList())
     val queue: StateFlow<List<QueueItem>> = _queue.asStateFlow()
+
+    // Sleep timer: milliseconds until playback auto-pauses, or null when no timer is set.
+    private val _sleepRemainingMs = MutableStateFlow<Long?>(null)
+    val sleepRemainingMs: StateFlow<Long?> = _sleepRemainingMs.asStateFlow()
+    private var sleepJob: Job? = null
 
     private var controller: MediaController? = null
     private var controllerFuture: ListenableFuture<MediaController>? = null
@@ -151,6 +157,45 @@ class PlaybackController(private val context: Context) {
                 Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
                 Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
                 else -> Player.REPEAT_MODE_OFF
+            }
+        }
+    }
+
+    /** Auto-pause after [minutes]. Replaces any running timer. */
+    fun startSleepTimer(minutes: Int) = startSleepTimerFor(minutes * 60_000L)
+
+    /** Auto-pause when the current track finishes. */
+    fun startSleepTimerAtTrackEnd() {
+        withController { c ->
+            val duration = c.duration
+            if (duration == C.TIME_UNSET || duration <= 0L) return@withController
+            startSleepTimerFor((duration - c.currentPosition).coerceAtLeast(0L))
+        }
+    }
+
+    fun cancelSleepTimer() {
+        sleepJob?.cancel()
+        sleepJob = null
+        _sleepRemainingMs.value = null
+    }
+
+    private fun startSleepTimerFor(durationMs: Long) {
+        sleepJob?.cancel()
+        if (durationMs <= 0L) {
+            _sleepRemainingMs.value = null
+            return
+        }
+        sleepJob = scope.launch {
+            var remaining = durationMs
+            while (isActive && remaining > 0L) {
+                _sleepRemainingMs.value = remaining
+                delay(1000L)
+                remaining -= 1000L
+            }
+            if (isActive) {
+                controller?.pause()
+                _sleepRemainingMs.value = null
+                sleepJob = null
             }
         }
     }

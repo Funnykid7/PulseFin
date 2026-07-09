@@ -20,14 +20,17 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import android.view.HapticFeedbackConstants
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.platform.LocalView
 
 /**
  * Springy press-scale: the element dips while held and bounces back on release. Reads the
@@ -39,6 +42,12 @@ fun Modifier.pressScale(
     pressedScale: Float = 0.86f,
 ): Modifier = composed {
     val pressed by interactionSource.collectIsPressedAsState()
+    // A light tactile tick the instant a press begins. Because bouncyClickable also routes through
+    // pressScale, this gives every button, row, and card in the app consistent tap haptics.
+    val view = LocalView.current
+    LaunchedEffect(pressed) {
+        if (pressed) view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+    }
     val scale by animateFloatAsState(
         targetValue = if (pressed) pressedScale else 1f,
         animationSpec = spring(

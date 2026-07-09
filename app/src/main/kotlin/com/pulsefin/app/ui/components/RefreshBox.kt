@@ -7,9 +7,11 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import android.view.HapticFeedbackConstants
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
 
 /**
@@ -27,9 +29,14 @@ fun RefreshBox(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val state = rememberPullToRefreshState()
+    val view = LocalView.current
     PullToRefreshBox(
         isRefreshing = isRefreshing,
-        onRefresh = onRefresh,
+        onRefresh = {
+            // Pull-to-refresh is a gesture (not a press), so it misses pressScale's haptic.
+            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            onRefresh()
+        },
         state = state,
         modifier = modifier,
         indicator = {

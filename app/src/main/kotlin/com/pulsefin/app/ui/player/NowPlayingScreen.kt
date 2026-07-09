@@ -20,22 +20,35 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,11 +63,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.pulsefin.app.ui.components.AnimatedPlayPauseIcon
+import com.pulsefin.app.ui.components.bouncyClickable
 import com.pulsefin.app.ui.components.pressScale
 import com.pulsefin.app.ui.theme.ArtworkTheme
 import com.pulsefin.core.designsystem.theme.RoundedHeroShape
+import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.designsystem.theme.cookieShape
+import com.pulsefin.core.domain.repository.MediaRepository
 import com.pulsefin.core.playback.controller.PlaybackController
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 /** Full-screen player: large art, metadata, the wavy seek bar, and transport controls. */
@@ -62,10 +79,19 @@ import org.koin.compose.koinInject
 fun NowPlayingScreen(
     onCollapse: () -> Unit,
     onOpenQueue: () -> Unit,
+    onOpenLyrics: () -> Unit,
     playbackController: PlaybackController = koinInject(),
+    repository: MediaRepository = koinInject(),
 ) {
     val state by playbackController.state.collectAsStateWithLifecycle()
     val positionMs by playbackController.positionMs.collectAsStateWithLifecycle()
+    // Create the favorites flow ONCE; calling observeFavoriteIds() inline would build a new Flow
+    // every recomposition (Now Playing recomposes ~2x/sec from the position tick), re-subscribing
+    // the Room query each time and causing enough jank to drop taps on the transport buttons.
+    val favoriteIdsFlow = remember(repository) { repository.observeFavoriteIds() }
+    val favoriteIds by favoriteIdsFlow.collectAsStateWithLifecycle(emptySet())
+    val scope = rememberCoroutineScope()
+    val isFavorite = state.currentMediaId?.let { it in favoriteIds } ?: false
 
     // Re-theme the whole screen to the current track's album art (per-screen Monet). The scheme is
     // hoisted in the nav host and shared with the mini-player, so it's already present when we open
@@ -75,23 +101,35 @@ fun NowPlayingScreen(
             NowPlayingContent(
                 state = state,
                 positionMs = positionMs,
+                isFavorite = isFavorite,
+                onToggleFavorite = {
+                    val id = state.currentMediaId ?: return@NowPlayingContent
+                    val target = !isFavorite
+                    scope.launch { repository.setFavorite(id, target) }
+                },
                 onCollapse = onCollapse,
                 onOpenQueue = onOpenQueue,
+                onOpenLyrics = onOpenLyrics,
                 playbackController = playbackController,
             )
         }
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun NowPlayingContent(
     state: com.pulsefin.core.playback.controller.PlaybackState,
     positionMs: Long,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
     onCollapse: () -> Unit,
     onOpenQueue: () -> Unit,
+    onOpenLyrics: () -> Unit,
     playbackController: PlaybackController,
 ) {
+    val sleepRemainingMs by playbackController.sleepRemainingMs.collectAsStateWithLifecycle()
+    var showSleepSheet by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -112,6 +150,7 @@ private fun NowPlayingContent(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             val collapseInteraction = remember { MutableInteractionSource() }
             IconButton(
@@ -121,14 +160,57 @@ private fun NowPlayingContent(
             ) {
                 Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Collapse")
             }
-            val queueInteraction = remember { MutableInteractionSource() }
-            IconButton(
-                onClick = onOpenQueue,
-                modifier = Modifier.pressScale(queueInteraction, pressedScale = 0.9f),
-                interactionSource = queueInteraction,
-            ) {
-                Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = "Queue")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val lyricsInteraction = remember { MutableInteractionSource() }
+                IconButton(
+                    onClick = onOpenLyrics,
+                    modifier = Modifier.pressScale(lyricsInteraction, pressedScale = 0.9f),
+                    interactionSource = lyricsInteraction,
+                ) {
+                    Icon(Icons.Filled.Lyrics, contentDescription = "Lyrics")
+                }
+                val sleepInteraction = remember { MutableInteractionSource() }
+                val sleepActive = sleepRemainingMs != null
+                IconButton(
+                    onClick = { showSleepSheet = true },
+                    modifier = Modifier.pressScale(sleepInteraction, pressedScale = 0.9f),
+                    interactionSource = sleepInteraction,
+                ) {
+                    Icon(
+                        Icons.Filled.Bedtime,
+                        contentDescription = "Sleep timer",
+                        tint = if (sleepActive) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                val queueInteraction = remember { MutableInteractionSource() }
+                IconButton(
+                    onClick = onOpenQueue,
+                    modifier = Modifier.pressScale(queueInteraction, pressedScale = 0.9f),
+                    interactionSource = queueInteraction,
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = "Queue")
+                }
             }
+        }
+
+        if (showSleepSheet) {
+            SleepTimerSheet(
+                remainingMs = sleepRemainingMs,
+                onDismiss = { showSleepSheet = false },
+                onPick = { minutes ->
+                    playbackController.startSleepTimer(minutes)
+                    showSleepSheet = false
+                },
+                onPickTrackEnd = {
+                    playbackController.startSleepTimerAtTrackEnd()
+                    showSleepSheet = false
+                },
+                onCancelTimer = {
+                    playbackController.cancelSleepTimer()
+                    showSleepSheet = false
+                },
+            )
         }
 
         Spacer(Modifier.weight(1f))
@@ -204,34 +286,36 @@ private fun NowPlayingContent(
             if (state.isRepeatActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             label = "repeatTint",
         )
+        val favoriteTint by animateColorAsState(
+            if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            label = "favoriteTint",
+        )
         val shuffleInteraction = remember { MutableInteractionSource() }
         val prevInteraction = remember { MutableInteractionSource() }
         val playInteraction = remember { MutableInteractionSource() }
         val nextInteraction = remember { MutableInteractionSource() }
         val repeatInteraction = remember { MutableInteractionSource() }
+        val favoriteInteraction = remember { MutableInteractionSource() }
 
+        // Transport: prev/next are tonal squircles flanking the scalloped cookie play button.
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(
-                onClick = playbackController::toggleShuffle,
-                modifier = Modifier.pressScale(shuffleInteraction),
-                interactionSource = shuffleInteraction,
-            ) {
-                Icon(Icons.Filled.Shuffle, contentDescription = "Shuffle", tint = shuffleTint)
-            }
-            IconButton(
+            FilledTonalIconButton(
                 onClick = playbackController::previous,
                 enabled = state.hasPrevious,
-                modifier = Modifier.pressScale(prevInteraction),
+                modifier = Modifier
+                    .size(56.dp)
+                    .pressScale(prevInteraction),
+                shape = SquircleShape,
                 interactionSource = prevInteraction,
             ) {
                 Icon(
                     Icons.Filled.SkipPrevious,
                     contentDescription = "Previous",
-                    modifier = Modifier.size(36.dp),
+                    modifier = Modifier.size(32.dp),
                 )
             }
             FilledIconButton(
@@ -249,31 +333,108 @@ private fun NowPlayingContent(
                     modifier = Modifier.size(36.dp),
                 )
             }
-            IconButton(
+            FilledTonalIconButton(
                 onClick = playbackController::next,
                 enabled = state.hasNext,
-                modifier = Modifier.pressScale(nextInteraction),
+                modifier = Modifier
+                    .size(56.dp)
+                    .pressScale(nextInteraction),
+                shape = SquircleShape,
                 interactionSource = nextInteraction,
             ) {
                 Icon(
                     Icons.Filled.SkipNext,
                     contentDescription = "Next",
-                    modifier = Modifier.size(36.dp),
-                )
-            }
-            IconButton(
-                onClick = playbackController::cycleRepeat,
-                modifier = Modifier.pressScale(repeatInteraction),
-                interactionSource = repeatInteraction,
-            ) {
-                Icon(
-                    imageVector = if (state.isRepeatOne) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
-                    contentDescription = "Repeat",
-                    tint = repeatTint,
+                    modifier = Modifier.size(32.dp),
                 )
             }
         }
 
+        Spacer(Modifier.size(16.dp))
+
+        // Secondary controls grouped in one stadium pill: shuffle · repeat · favorite.
+        Surface(
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+            shape = RoundedCornerShape(percent = 50),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(
+                    onClick = playbackController::toggleShuffle,
+                    modifier = Modifier.pressScale(shuffleInteraction),
+                    interactionSource = shuffleInteraction,
+                ) {
+                    Icon(Icons.Filled.Shuffle, contentDescription = "Shuffle", tint = shuffleTint)
+                }
+                IconButton(
+                    onClick = playbackController::cycleRepeat,
+                    modifier = Modifier.pressScale(repeatInteraction),
+                    interactionSource = repeatInteraction,
+                ) {
+                    Icon(
+                        imageVector = if (state.isRepeatOne) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                        contentDescription = "Repeat",
+                        tint = repeatTint,
+                    )
+                }
+                IconButton(
+                    onClick = onToggleFavorite,
+                    enabled = state.hasItem,
+                    modifier = Modifier.pressScale(favoriteInteraction),
+                    interactionSource = favoriteInteraction,
+                ) {
+                    Icon(
+                        imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                        tint = favoriteTint,
+                    )
+                }
+            }
+        }
+
         Spacer(Modifier.weight(1f))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SleepTimerSheet(
+    remainingMs: Long?,
+    onDismiss: () -> Unit,
+    onPick: (minutes: Int) -> Unit,
+    onPickTrackEnd: () -> Unit,
+    onCancelTimer: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState()
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Text(
+            text = if (remainingMs != null) "Sleeping in ${formatTime(remainingMs)}" else "Sleep timer",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+        )
+        listOf(15, 30, 45, 60).forEach { minutes ->
+            ListItem(
+                headlineContent = { Text("$minutes minutes") },
+                modifier = Modifier.bouncyClickable(onClick = { onPick(minutes) }),
+            )
+        }
+        ListItem(
+            headlineContent = { Text("End of track") },
+            modifier = Modifier.bouncyClickable(onClick = onPickTrackEnd),
+        )
+        if (remainingMs != null) {
+            ListItem(
+                headlineContent = {
+                    Text("Cancel timer", color = MaterialTheme.colorScheme.primary)
+                },
+                modifier = Modifier.bouncyClickable(onClick = onCancelTimer),
+            )
+        }
+        Spacer(Modifier.size(16.dp))
     }
 }

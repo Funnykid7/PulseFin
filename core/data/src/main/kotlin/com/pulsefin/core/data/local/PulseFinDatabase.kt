@@ -27,6 +27,7 @@ data class SongEntity(
     val durationMs: Long,
     val artworkUrl: String?,
     val streamUrl: String?,
+    val isFavorite: Boolean = false,
 )
 
 @Entity(tableName = "albums")
@@ -49,6 +50,13 @@ data class ArtistEntity(
 interface SongDao {
     @Query("SELECT * FROM songs ORDER BY title")
     fun observeAll(): Flow<List<SongEntity>>
+
+    /** IDs of favorited songs, observed so the heart reflects instantly across screens. */
+    @Query("SELECT id FROM songs WHERE isFavorite = 1")
+    fun observeFavoriteIds(): Flow<List<String>>
+
+    @Query("UPDATE songs SET isFavorite = :favorite WHERE id = :id")
+    suspend fun setFavorite(id: String, favorite: Boolean)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(songs: List<SongEntity>)
@@ -102,7 +110,7 @@ interface ArtistDao {
 
 @Database(
     entities = [SongEntity::class, AlbumEntity::class, ArtistEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class PulseFinDatabase : RoomDatabase() {

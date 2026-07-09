@@ -11,6 +11,8 @@ import com.pulsefin.core.data.local.SongDao
 import com.pulsefin.core.data.local.SongEntity
 import com.pulsefin.core.domain.model.Album
 import com.pulsefin.core.domain.model.Artist
+import com.pulsefin.core.domain.model.LyricLine
+import com.pulsefin.core.domain.model.Lyrics
 import com.pulsefin.core.domain.model.MediaId
 import com.pulsefin.core.domain.model.Song
 import com.pulsefin.core.domain.repository.MediaRepository
@@ -24,10 +26,13 @@ import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.audioApi
 import org.jellyfin.sdk.api.client.extensions.imageApi
 import org.jellyfin.sdk.api.client.extensions.itemsApi
+import org.jellyfin.sdk.api.client.extensions.lyricsApi
+import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.api.ItemSortBy
+import org.jellyfin.sdk.model.api.SortOrder
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
 import java.util.UUID
 
@@ -58,6 +63,9 @@ class MediaRepositoryImpl(
 
     override fun observeArtists(): Flow<List<Artist>> =
         artistDao.observeAll().map { rows -> rows.map { it.toArtist() } }
+
+    override fun observeFavoriteIds(): Flow<Set<String>> =
+        songDao.observeFavoriteIds().map { it.toSet() }
 
     override suspend fun refreshLibrary(force: Boolean): PulseResult<Unit> = withContext(dispatchers.io) {
         PulseResult.runCatchingResult {
@@ -133,6 +141,49 @@ class MediaRepositoryImpl(
             }
         }
 
+    override suspend fun setFavorite(songId: String, favorite: Boolean): PulseResult<Unit> =
+        withContext(dispatchers.io) {
+            PulseResult.runCatchingResult {
+                // Optimistic: update Room first so the heart flips instantly, then tell the server.
+                songDao.setFavorite(songId, favorite)
+                val api = requireApi()
+                val itemId = UUID.fromString(songId)
+                if (favorite) api.userLibraryApi.markFavoriteItem(itemId = itemId)
+                else api.userLibraryApi.unmarkFavoriteItem(itemId = itemId)
+                Unit
+            }
+        }
+
+    override suspend fun recentlyAdded(limit: Int): PulseResult<List<Album>> =
+        withContext(dispatchers.io) {
+            PulseResult.runCatchingResult {
+                val api = requireApi()
+                api.itemsApi.getItems(
+                    GetItemsRequest(
+                        includeItemTypes = listOf(BaseItemKind.MUSIC_ALBUM),
+                        recursive = true,
+                        sortBy = listOf(ItemSortBy.DATE_CREATED),
+                        sortOrder = listOf(SortOrder.DESCENDING),
+                        limit = limit,
+                    ),
+                ).content.items.orEmpty().map { it.toAlbum(api) }
+            }
+        }
+
+    override suspend fun lyrics(songId: String): PulseResult<Lyrics> =
+        withContext(dispatchers.io) {
+            PulseResult.runCatchingResult {
+                val api = requireApi()
+                val dto = api.lyricsApi.getLyrics(itemId = UUID.fromString(songId)).content
+                Lyrics(
+                    dto.lyrics.map { line ->
+                        // Jellyfin start times are in ticks (100-ns units) -> milliseconds.
+                        LyricLine(startMs = line.start?.let { it / 10_000 }, text = line.text)
+                    },
+                )
+            }
+        }
+
     private suspend fun requireApi(): ApiClient = apiProvider.api() ?: error("Not signed in")
 
     private suspend fun fetchItems(api: ApiClient, type: BaseItemKind, limit: Int? = null): List<BaseItemDto> =
@@ -156,6 +207,7 @@ private fun BaseItemDto.toSong(api: ApiClient): Song = Song(
     durationMs = (runTimeTicks ?: 0L) / 10_000,
     artworkUrl = artworkUrl(api),
     streamUrl = ensureApiKey(api.audioApi.getAudioStreamUrl(itemId = id, static = true), api.accessToken),
+    isFavorite = userData?.isFavorite ?: false,
 )
 
 private fun BaseItemDto.toAlbum(api: ApiClient): Album = Album(
@@ -187,10 +239,10 @@ private fun ensureApiKey(url: String, token: String?): String {
 
 // --- domain <-> Room entity ---
 
-private fun Song.toEntity() = SongEntity(id.value, title, albumName, artistName, durationMs, artworkUrl, streamUrl)
+private fun Song.toEntity() = SongEntity(id.value, title, albumName, artistName, durationMs, artworkUrl, streamUrl, isFavorite)
 private fun Album.toEntity() = AlbumEntity(id.value, name, artistName, artworkUrl, year)
 private fun Artist.toEntity() = ArtistEntity(id.value, name, artworkUrl)
 
-private fun SongEntity.toSong() = Song(MediaId(id), title, albumName, artistName, durationMs, artworkUrl, streamUrl)
+private fun SongEntity.toSong() = Song(MediaId(id), title, albumName, artistName, durationMs, artworkUrl, streamUrl, isFavorite)
 private fun AlbumEntity.toAlbum() = Album(MediaId(id), name, artistName, artworkUrl, year)
 private fun ArtistEntity.toArtist() = Artist(MediaId(id), name, artworkUrl)

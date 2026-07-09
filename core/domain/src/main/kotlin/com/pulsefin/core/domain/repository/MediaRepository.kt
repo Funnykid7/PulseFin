@@ -3,6 +3,7 @@ package com.pulsefin.core.domain.repository
 import com.pulsefin.core.common.result.PulseResult
 import com.pulsefin.core.domain.model.Album
 import com.pulsefin.core.domain.model.Artist
+import com.pulsefin.core.domain.model.Lyrics
 import com.pulsefin.core.domain.model.Song
 import kotlinx.coroutines.flow.Flow
 
@@ -16,6 +17,9 @@ interface MediaRepository {
     fun observeAlbums(): Flow<List<Album>>
     fun observeArtists(): Flow<List<Artist>>
 
+    /** IDs of the songs the user has favorited, observed from Room for instant, offline-aware UI. */
+    fun observeFavoriteIds(): Flow<Set<String>>
+
     /**
      * Fetches songs/albums/artists from the server and mirrors them into Room. Skips the network
      * if already synced this process unless [force] is set (e.g. pull-to-refresh).
@@ -27,6 +31,15 @@ interface MediaRepository {
     suspend fun albumsForArtist(artistId: String): PulseResult<List<Album>>
 
     suspend fun search(query: String): PulseResult<SearchResults>
+
+    /** Favorites the song on the server, then mirrors the state into Room optimistically. */
+    suspend fun setFavorite(songId: String, favorite: Boolean): PulseResult<Unit>
+
+    /** Most recently added albums, newest first (for the Home feed). Network. */
+    suspend fun recentlyAdded(limit: Int): PulseResult<List<Album>>
+
+    /** Timed or plain lyrics for a song; a [Failure] or empty result means none are available. */
+    suspend fun lyrics(songId: String): PulseResult<Lyrics>
 }
 
 data class SearchResults(
