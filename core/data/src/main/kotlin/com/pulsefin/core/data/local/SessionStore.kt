@@ -1,13 +1,13 @@
 package com.pulsefin.core.data.local
 
 import android.content.Context
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
+import com.pulsefin.core.common.dispatchers.AppDispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
-
-private val Context.sessionDataStore by preferencesDataStore(name = "pulsefin_session")
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 
 /** The persisted set-and-forget session for the single configured Jellyfin server. */
 data class Session(
@@ -18,40 +18,52 @@ data class Session(
 )
 
 /**
- * Persists the authenticated session. Backed by DataStore; the access token never leaves
- * the device. (Wrapping the token in an encrypted store is a follow-up hardening step.)
+ * Persists the authenticated session in Keystore-backed [EncryptedSharedPreferences] — the
+ * access token never leaves the device, and is encrypted at rest (not just plaintext DataStore).
  */
-class SessionStore(private val context: Context) {
+class SessionStore(context: Context, private val dispatchers: AppDispatchers) {
 
     private object Keys {
-        val SERVER = stringPreferencesKey("server_url")
-        val TOKEN = stringPreferencesKey("access_token")
-        val USER_NAME = stringPreferencesKey("user_name")
-        val USER_ID = stringPreferencesKey("user_id")
+        const val SERVER = "server_url"
+        const val TOKEN = "access_token"
+        const val USER_NAME = "user_name"
+        const val USER_ID = "user_id"
     }
 
-    val session: Flow<Session?> = context.sessionDataStore.data.map { prefs ->
-        val server = prefs[Keys.SERVER]
-        val token = prefs[Keys.TOKEN]
-        val user = prefs[Keys.USER_NAME]
-        if (server != null && token != null && user != null) {
-            Session(server, token, user, prefs[Keys.USER_ID])
+    private val prefs = EncryptedSharedPreferences.create(
+        context,
+        "pulsefin_session_secure",
+        MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+    )
+
+    private val _session = MutableStateFlow(readSession())
+    val session: Flow<Session?> = _session.asStateFlow()
+
+    suspend fun save(session: Session) = withContext(dispatchers.io) {
+        prefs.edit()
+            .putString(Keys.SERVER, session.serverUrl)
+            .putString(Keys.TOKEN, session.accessToken)
+            .putString(Keys.USER_NAME, session.userName)
+            .apply { session.userId?.let { putString(Keys.USER_ID, it) } ?: remove(Keys.USER_ID) }
+            .apply()
+        _session.value = session
+    }
+
+    suspend fun clear() = withContext(dispatchers.io) {
+        prefs.edit().clear().apply()
+        _session.value = null
+    }
+
+    private fun readSession(): Session? {
+        val server = prefs.getString(Keys.SERVER, null)
+        val token = prefs.getString(Keys.TOKEN, null)
+        val user = prefs.getString(Keys.USER_NAME, null)
+        return if (server != null && token != null && user != null) {
+            Session(server, token, user, prefs.getString(Keys.USER_ID, null))
         } else {
             null
         }
-    }
-
-    suspend fun save(session: Session) {
-        context.sessionDataStore.edit { prefs ->
-            prefs[Keys.SERVER] = session.serverUrl
-            prefs[Keys.TOKEN] = session.accessToken
-            prefs[Keys.USER_NAME] = session.userName
-            val id = session.userId
-            if (id != null) prefs[Keys.USER_ID] = id else prefs.remove(Keys.USER_ID)
-        }
-    }
-
-    suspend fun clear() {
-        context.sessionDataStore.edit { it.clear() }
     }
 }

@@ -44,6 +44,7 @@ fun MediaRow(
     titleWeight: FontWeight? = null,
     trailingText: String? = null,
     trailingColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
@@ -90,5 +91,6 @@ fun MediaRow(
                 color = trailingColor,
             )
         }
+        trailing?.invoke()
     }
 }

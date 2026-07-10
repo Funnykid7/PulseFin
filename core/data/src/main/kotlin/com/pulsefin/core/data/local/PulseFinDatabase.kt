@@ -52,6 +52,14 @@ data class RecentSearchEntity(
     val searchedAtMs: Long,
 )
 
+@Entity(tableName = "playlists")
+data class PlaylistEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val artworkUrl: String?,
+    val songCount: Int,
+)
+
 @Dao
 interface SongDao {
     @Query("SELECT * FROM songs ORDER BY title")
@@ -129,9 +137,30 @@ interface RecentSearchDao {
     suspend fun clearAll()
 }
 
+@Dao
+interface PlaylistDao {
+    @Query("SELECT * FROM playlists ORDER BY name")
+    fun observeAll(): Flow<List<PlaylistEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(playlists: List<PlaylistEntity>)
+
+    @Query("DELETE FROM playlists")
+    suspend fun clear()
+
+    @Transaction
+    suspend fun replaceAll(playlists: List<PlaylistEntity>) {
+        clear()
+        upsertAll(playlists)
+    }
+}
+
 @Database(
-    entities = [SongEntity::class, AlbumEntity::class, ArtistEntity::class, RecentSearchEntity::class],
-    version = 5,
+    entities = [
+        SongEntity::class, AlbumEntity::class, ArtistEntity::class, RecentSearchEntity::class,
+        PlaylistEntity::class,
+    ],
+    version = 6,
     exportSchema = false,
 )
 abstract class PulseFinDatabase : RoomDatabase() {
@@ -139,6 +168,7 @@ abstract class PulseFinDatabase : RoomDatabase() {
     abstract fun albumDao(): AlbumDao
     abstract fun artistDao(): ArtistDao
     abstract fun recentSearchDao(): RecentSearchDao
+    abstract fun playlistDao(): PlaylistDao
 
     companion object {
         fun build(context: Context): PulseFinDatabase =

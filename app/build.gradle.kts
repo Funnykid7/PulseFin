@@ -1,8 +1,23 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.androidx.baselineprofile)
 }
+
+// Real release signing, read from a gitignored keystore.properties (see docs/RELEASE_SIGNING.md)
+// or environment variables — never from anything committed. Absent either, release falls back
+// to debug signing so local builds keep working without a keystore.
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+
+fun releaseSigningProperty(propertyKey: String, envVar: String): String? =
+    keystoreProperties.getProperty(propertyKey) ?: System.getenv(envVar)
+
+val releaseStoreFile = releaseSigningProperty("storeFile", "RELEASE_STORE_FILE")
 
 android {
     namespace = "com.pulsefin.app"
@@ -18,15 +33,25 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = rootProject.file(releaseStoreFile)
+                storePassword = releaseSigningProperty("storePassword", "RELEASE_STORE_PASSWORD")
+                keyAlias = releaseSigningProperty("keyAlias", "RELEASE_KEY_ALIAS")
+                keyPassword = releaseSigningProperty("keyPassword", "RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
         }
         release {
-            // Debug-signed so the optimized build installs on local test devices
-            // (no store publishing configured yet). Real perf testing happens here —
-            // debug builds skip R8 and the baseline profile.
-            signingConfig = signingConfigs.getByName("debug")
+            // Real signing when keystore.properties/env vars are set (see docs/RELEASE_SIGNING.md);
+            // otherwise debug-signed so the optimized build still installs on local test devices.
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

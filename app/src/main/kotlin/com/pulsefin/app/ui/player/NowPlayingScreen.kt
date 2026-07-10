@@ -43,6 +43,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -73,6 +74,7 @@ import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.designsystem.theme.cookieShape
 import com.pulsefin.core.domain.repository.MediaRepository
 import com.pulsefin.core.playback.controller.PlaybackController
+import com.pulsefin.core.playback.controller.PlaybackError
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -200,6 +202,17 @@ private fun NowPlayingContent(
                     Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = "Queue")
                 }
             }
+        }
+
+        val currentError = state.error
+        if (currentError != null) {
+            PlaybackErrorBanner(
+                error = currentError,
+                onRetry = playbackController::retry,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+            )
         }
 
         if (showSleepSheet) {
@@ -406,6 +419,44 @@ private fun NowPlayingContent(
 
         Spacer(Modifier.weight(1f))
     }
+}
+
+@Composable
+private fun PlaybackErrorBanner(
+    error: PlaybackError,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.errorContainer,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = error.toMessage(),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onRetry) {
+                Text("Retry", color = MaterialTheme.colorScheme.onErrorContainer)
+            }
+        }
+    }
+}
+
+private fun PlaybackError.toMessage(): String = when (this) {
+    PlaybackError.Network -> "Connection lost — check your network or server."
+    PlaybackError.Auth -> "Sign-in expired. Try signing out and back in."
+    PlaybackError.NotFound -> "This track is no longer available on the server."
+    PlaybackError.Unknown -> "Playback error."
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

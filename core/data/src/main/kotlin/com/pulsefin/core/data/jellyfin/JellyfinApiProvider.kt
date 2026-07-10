@@ -21,6 +21,9 @@ class JellyfinApiProvider(
     private var cachedForToken: String? = null
     private var cachedApi: ApiClient? = null
 
+    /** The signed-in user's ID, needed by Jellyfin calls that require an explicit owner (e.g. playlist creation). */
+    suspend fun currentUserId(): String? = sessionStore.session.first()?.userId
+
     /** The authenticated client for the active session, or null if not signed in. */
     suspend fun api(): ApiClient? {
         val session = sessionStore.session.first() ?: return null

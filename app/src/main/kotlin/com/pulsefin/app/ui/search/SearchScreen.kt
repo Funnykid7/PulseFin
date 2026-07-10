@@ -38,8 +38,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulsefin.app.ui.components.MediaRow
+import com.pulsefin.app.ui.components.SongOverflowMenu
 import com.pulsefin.app.ui.components.bouncyClickable
 import com.pulsefin.app.ui.components.pressScale
+import com.pulsefin.app.ui.playlist.AddToPlaylistSheet
 import com.pulsefin.core.common.util.sizedArtUrl
 import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.common.result.PulseResult
@@ -100,6 +102,10 @@ class SearchViewModel(
 
     fun playSong(index: Int) = playbackController.play(uiState.results.songs, index)
 
+    fun playNext(song: Song) = playbackController.playNext(song)
+
+    fun addToQueue(song: Song) = playbackController.addToQueue(song)
+
     fun removeRecentSearch(query: String) = viewModelScope.launch { repository.removeRecentSearch(query) }
 
     fun clearRecentSearches() = viewModelScope.launch { repository.clearRecentSearches() }
@@ -116,6 +122,7 @@ fun SearchScreen(
     val state = viewModel.uiState
     val results = state.results
     val recentSearches by viewModel.recentSearches.collectAsStateWithLifecycle(emptyList())
+    var addToPlaylistSongId by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -196,6 +203,9 @@ fun SearchScreen(
                     SongResultRow(
                         song = song,
                         onClick = { viewModel.playSong(index) },
+                        onPlayNext = { viewModel.playNext(song) },
+                        onAddToQueue = { viewModel.addToQueue(song) },
+                        onAddToPlaylist = { addToPlaylistSongId = song.id.value },
                         modifier = Modifier.animateItem(),
                     )
                 }
@@ -235,6 +245,11 @@ fun SearchScreen(
                 }
             }
         }
+    }
+
+    val songIdForSheet = addToPlaylistSongId
+    if (songIdForSheet != null) {
+        AddToPlaylistSheet(songId = songIdForSheet, onDismiss = { addToPlaylistSongId = null })
     }
 }
 
@@ -288,11 +303,39 @@ private fun RecentSearchRow(
 }
 
 @Composable
-private fun SongResultRow(song: Song, onClick: () -> Unit, modifier: Modifier = Modifier) =
-    ResultRow(title = song.title, subtitle = song.artistName, artworkUrl = song.artworkUrl, circle = false, onClick = onClick, modifier = modifier)
+private fun SongResultRow(
+    song: Song,
+    onClick: () -> Unit,
+    onPlayNext: () -> Unit,
+    onAddToQueue: () -> Unit,
+    onAddToPlaylist: () -> Unit,
+    modifier: Modifier = Modifier,
+) = ResultRow(
+    title = song.title,
+    subtitle = song.artistName,
+    artworkUrl = song.artworkUrl,
+    circle = false,
+    onClick = onClick,
+    modifier = modifier,
+    trailing = {
+        SongOverflowMenu(
+            onPlayNext = onPlayNext,
+            onAddToQueue = onAddToQueue,
+            onAddToPlaylist = onAddToPlaylist,
+        )
+    },
+)
 
 @Composable
-private fun ResultRow(title: String, subtitle: String?, artworkUrl: String?, circle: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun ResultRow(
+    title: String,
+    subtitle: String?,
+    artworkUrl: String?,
+    circle: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null,
+) {
     MediaRow(
         title = title,
         imageModel = sizedArtUrl(artworkUrl, 180),
@@ -301,5 +344,6 @@ private fun ResultRow(title: String, subtitle: String?, artworkUrl: String?, cir
         imageSize = 48.dp,
         imageShape = if (circle) CircleShape else SquircleShape,
         titleStyle = MaterialTheme.typography.bodyLarge,
+        trailing = trailing,
     )
 }

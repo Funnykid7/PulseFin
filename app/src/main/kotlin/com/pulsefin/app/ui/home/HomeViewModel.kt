@@ -38,4 +38,8 @@ class HomeViewModel(
     }
 
     fun onSongClick(index: Int) = playbackController.play(songs.value, index)
+
+    fun playNext(song: Song) = playbackController.playNext(song)
+
+    fun addToQueue(song: Song) = playbackController.addToQueue(song)
 }

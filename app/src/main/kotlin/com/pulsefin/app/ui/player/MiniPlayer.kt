@@ -90,9 +90,13 @@ fun MiniPlayer(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = artist,
+                        text = if (state.error != null) "Playback error — tap for details" else artist,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (state.error != null) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )

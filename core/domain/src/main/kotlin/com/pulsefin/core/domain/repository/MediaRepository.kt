@@ -4,6 +4,7 @@ import com.pulsefin.core.common.result.PulseResult
 import com.pulsefin.core.domain.model.Album
 import com.pulsefin.core.domain.model.Artist
 import com.pulsefin.core.domain.model.Lyrics
+import com.pulsefin.core.domain.model.Playlist
 import com.pulsefin.core.domain.model.Song
 import kotlinx.coroutines.flow.Flow
 
@@ -26,6 +27,9 @@ interface MediaRepository {
      */
     suspend fun refreshLibrary(force: Boolean = false): PulseResult<Unit>
 
+    /** The error from the most recent [refreshLibrary] call, or null if it last succeeded. */
+    fun observeLastSyncError(): Flow<Throwable?>
+
     suspend fun songsForAlbum(albumId: String): PulseResult<List<Song>>
 
     suspend fun albumsForArtist(artistId: String): PulseResult<List<Album>>
@@ -34,6 +38,40 @@ interface MediaRepository {
 
     /** Favorites the song on the server, then mirrors the state into Room optimistically. */
     suspend fun setFavorite(songId: String, favorite: Boolean): PulseResult<Unit>
+
+    /** Playlists, observed from Room for instant, offline-aware UI (server is source of truth). */
+    fun observePlaylists(): Flow<List<Playlist>>
+
+    suspend fun createPlaylist(name: String, songIds: List<String> = emptyList()): PulseResult<Unit>
+
+    suspend fun renamePlaylist(playlistId: String, name: String): PulseResult<Unit>
+
+    suspend fun deletePlaylist(playlistId: String): PulseResult<Unit>
+
+    /** Songs in the playlist, in order; each carries its playlist-entry ID for remove/reorder. */
+    suspend fun songsForPlaylist(playlistId: String): PulseResult<List<Song>>
+
+    suspend fun addToPlaylist(playlistId: String, songIds: List<String>): PulseResult<Unit>
+
+    /** [entryIds] are playlist-entry IDs ([Song.playlistItemId]), not song IDs. */
+    suspend fun removeFromPlaylist(playlistId: String, entryIds: List<String>): PulseResult<Unit>
+
+    /** [entryId] is a playlist-entry ID ([Song.playlistItemId]), not a song ID. */
+    suspend fun reorderPlaylistItem(playlistId: String, entryId: String, newIndex: Int): PulseResult<Unit>
+
+    /** Tells the Jellyfin server playback of [songId] started, for play-history/"now playing". */
+    suspend fun reportPlaybackStart(songId: String, playSessionId: String)
+
+    /** Best-effort progress ping; call periodically while playing and on pause/resume. */
+    suspend fun reportPlaybackProgress(
+        songId: String,
+        playSessionId: String,
+        positionMs: Long,
+        isPaused: Boolean,
+    )
+
+    /** Tells the server playback stopped, so it stops showing the item as in-progress. */
+    suspend fun reportPlaybackStopped(songId: String, playSessionId: String, positionMs: Long)
 
     /** Most recently added albums, newest first (for the Home feed). Network. */
     suspend fun recentlyAdded(limit: Int): PulseResult<List<Album>>

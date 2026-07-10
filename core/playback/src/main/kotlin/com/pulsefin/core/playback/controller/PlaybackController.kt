@@ -6,12 +6,17 @@ import android.net.Uri
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import com.pulsefin.core.common.util.sizedArtUrl
 import com.pulsefin.core.domain.model.Song
+import com.pulsefin.core.playback.queue.PersistedQueueItem
+import com.pulsefin.core.playback.queue.PersistedQueueState
+import com.pulsefin.core.playback.queue.QueueStateStore
 import com.pulsefin.core.playback.service.PlaybackService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -37,10 +42,37 @@ data class PlaybackState(
     val hasPrevious: Boolean = false,
     val shuffleEnabled: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
+    val error: PlaybackError? = null,
 ) {
     val hasItem: Boolean get() = currentMediaId != null
     val isRepeatActive: Boolean get() = repeatMode != Player.REPEAT_MODE_OFF
     val isRepeatOne: Boolean get() = repeatMode == Player.REPEAT_MODE_ONE
+}
+
+/** Provider-agnostic classification of a playback failure, for the UI to render a message. */
+sealed interface PlaybackError {
+    data object Network : PlaybackError
+    data object Auth : PlaybackError
+    data object NotFound : PlaybackError
+    data object Unknown : PlaybackError
+}
+
+private val NETWORK_ERROR_CODES = setOf(
+    PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+    PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+    PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
+)
+
+private fun PlaybackException.toDomainError(): PlaybackError {
+    val httpCause = cause as? HttpDataSource.InvalidResponseCodeException
+    return when {
+        httpCause?.responseCode == 401 -> PlaybackError.Auth
+        errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND ||
+            httpCause?.responseCode == 404 -> PlaybackError.NotFound
+        errorCode in NETWORK_ERROR_CODES || errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ->
+            PlaybackError.Network
+        else -> PlaybackError.Unknown
+    }
 }
 
 /** A single entry in the play queue. */
@@ -56,7 +88,7 @@ data class QueueItem(
  * lazily-connected controller and exposes playback as a [StateFlow]. All controller calls
  * happen on the main thread (Media3 requirement).
  */
-class PlaybackController(private val context: Context) {
+class PlaybackController(private val context: Context, private val queueStateStore: QueueStateStore) {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -87,12 +119,22 @@ class PlaybackController(private val context: Context) {
         }
     }
 
+    private val controllerListener = object : MediaController.Listener {
+        override fun onDisconnected(controller: MediaController) {
+            // The session died under us (e.g. the service was killed). Drop both the controller
+            // and its future so the next withController() call reconnects instead of calling
+            // methods on a stale, disconnected controller.
+            this@PlaybackController.controller = null
+            this@PlaybackController.controllerFuture = null
+        }
+    }
+
     private fun withController(action: (MediaController) -> Unit) {
         controller?.let { action(it); return }
         val future = controllerFuture ?: MediaController.Builder(
             context,
             SessionToken(context, ComponentName(context, PlaybackService::class.java)),
-        ).buildAsync().also { controllerFuture = it }
+        ).setListener(controllerListener).buildAsync().also { controllerFuture = it }
 
         future.addListener({
             val ready = future.get()
@@ -102,6 +144,14 @@ class PlaybackController(private val context: Context) {
             startTicking()
             action(ready)
         }, context.mainExecutor)
+    }
+
+    /** Re-prepares the current item after a playback error (e.g. the server came back). */
+    fun retry() {
+        withController { controller ->
+            controller.prepare()
+            controller.play()
+        }
     }
 
     private fun startTicking() {
@@ -209,6 +259,29 @@ class PlaybackController(private val context: Context) {
         }
     }
 
+    /** Inserts [song] to play right after the current item, without disturbing playback. */
+    fun playNext(song: Song) {
+        val item = song.toMediaItem() ?: return
+        withController { controller ->
+            val insertAt = (controller.currentMediaItemIndex + 1).coerceIn(0, controller.mediaItemCount)
+            controller.addMediaItem(insertAt, item)
+        }
+    }
+
+    /** Appends [song] to the end of the queue. */
+    fun addToQueue(song: Song) {
+        val item = song.toMediaItem() ?: return
+        withController { it.addMediaItem(item) }
+    }
+
+    fun moveQueueItem(fromIndex: Int, toIndex: Int) {
+        withController { it.moveMediaItem(fromIndex, toIndex) }
+    }
+
+    fun removeFromQueue(index: Int) {
+        withController { it.removeMediaItem(index) }
+    }
+
     private fun updateQueue(player: Player) {
         _queue.value = (0 until player.mediaItemCount).map { i ->
             val item = player.getMediaItemAt(i)
@@ -220,6 +293,33 @@ class PlaybackController(private val context: Context) {
                 artworkUrl = md.artworkUri?.toString(),
             )
         }
+        persistQueueState(player)
+    }
+
+    // Fires on discrete events (track transitions, play/pause, seeks, queue edits) — not every
+    // position tick — so this is cheap enough to call unconditionally from updateQueue().
+    private fun persistQueueState(player: Player) {
+        if (player.mediaItemCount == 0) return
+        val items = (0 until player.mediaItemCount).mapNotNull { i ->
+            val item = player.getMediaItemAt(i)
+            val uri = item.localConfiguration?.uri?.toString() ?: return@mapNotNull null
+            val md = item.mediaMetadata
+            PersistedQueueItem(
+                mediaId = item.mediaId,
+                title = md.title?.toString() ?: "Unknown",
+                artist = md.artist?.toString().orEmpty(),
+                album = md.albumTitle?.toString().orEmpty(),
+                artworkUrl = md.artworkUri?.toString(),
+                streamUrl = uri,
+            )
+        }
+        if (items.isEmpty()) return
+        val state = PersistedQueueState(
+            items = items,
+            currentIndex = player.currentMediaItemIndex,
+            positionMs = player.currentPosition.coerceAtLeast(0L),
+        )
+        scope.launch { queueStateStore.save(state) }
     }
 
     private fun updateState(player: Player) {
@@ -237,6 +337,7 @@ class PlaybackController(private val context: Context) {
             hasPrevious = player.hasPreviousMediaItem(),
             shuffleEnabled = player.shuffleModeEnabled,
             repeatMode = player.repeatMode,
+            error = player.playerError?.toDomainError(),
         )
     }
 }

@@ -32,6 +32,19 @@ data class Song(
     /** Direct-play stream URL resolved from the Jellyfin server. */
     val streamUrl: String? = null,
     val isFavorite: Boolean = false,
+    /**
+     * The playlist-entry ID for this song, only populated when it came from
+     * [com.pulsefin.core.domain.repository.MediaRepository.songsForPlaylist] — distinct from
+     * [id], and required by Jellyfin's remove/reorder playlist-item calls.
+     */
+    val playlistItemId: String? = null,
+)
+
+data class Playlist(
+    val id: MediaId,
+    val name: String,
+    val artworkUrl: String? = null,
+    val songCount: Int = 0,
 )
 
 /** One line of lyrics; [startMs] is null for unsynced (plain-text) lyrics. */

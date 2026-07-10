@@ -10,8 +10,9 @@ import com.pulsefin.core.domain.repository.AuthRepository
 import kotlinx.coroutines.launch
 
 data class LoginUiState(
-    // Prefilled with the configured test server for convenience; not a secret.
-    val server: String = "http://100.103.47.77:8096",
+    val serverScheme: String = "http",
+    // Host[:port] only — no scheme. The scheme comes from serverScheme via the dropdown.
+    val serverHost: String = "",
     val username: String = "",
     val password: String = "",
     val isSubmitting: Boolean = false,
@@ -25,8 +26,12 @@ class LoginViewModel(
     var uiState by mutableStateOf(LoginUiState())
         private set
 
-    fun onServerChange(value: String) {
-        uiState = uiState.copy(server = value, error = null)
+    fun onServerSchemeChange(scheme: String) {
+        uiState = uiState.copy(serverScheme = scheme, error = null)
+    }
+
+    fun onServerHostChange(value: String) {
+        uiState = uiState.copy(serverHost = value, error = null)
     }
 
     fun onUsernameChange(value: String) {
@@ -40,14 +45,14 @@ class LoginViewModel(
     fun submit() {
         val current = uiState
         if (current.isSubmitting) return
-        if (current.server.isBlank() || current.username.isBlank()) {
+        if (current.serverHost.isBlank() || current.username.isBlank()) {
             uiState = current.copy(error = "Server and username are required")
             return
         }
         uiState = current.copy(isSubmitting = true, error = null)
         viewModelScope.launch {
             val result = authRepository.loginWithPassword(
-                serverUrl = current.server,
+                serverUrl = "${current.serverScheme}://${current.serverHost.trim()}",
                 username = current.username,
                 password = current.password,
             )

@@ -6,6 +6,7 @@ import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.pulsefin.app.di.appModule
+import com.pulsefin.app.playback.PlaybackScrobbler
 import com.pulsefin.core.data.di.dataModule
 import com.pulsefin.core.playback.di.playbackModule
 import org.koin.android.ext.koin.androidContext
@@ -16,11 +17,12 @@ class PulseFinApp : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
-        startKoin {
+        val koinApp = startKoin {
             androidLogger()
             androidContext(this@PulseFinApp)
             modules(dataModule, playbackModule, appModule)
         }
+        koinApp.koin.get<PlaybackScrobbler>().start()
     }
 
     /**

@@ -8,14 +8,24 @@ import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.pulsefin.core.playback.R
+import com.pulsefin.core.playback.queue.QueueStateStore
+import com.pulsefin.core.playback.queue.toMediaItem
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import org.koin.android.ext.android.inject
 
 /**
  * All transport controls run through this [MediaSessionService] so playback survives the
  * UI and integrates with the lock screen, Android Auto and Wear OS. This is the transport
- * shell; queue management, direct-play stream resolution and audio focus land in the
- * playback increment.
+ * shell; direct-play stream resolution and audio focus land in the playback increment.
  */
 class PlaybackService : MediaSessionService() {
+
+    private val queueStateStore: QueueStateStore by inject()
+    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private var mediaSession: MediaSession? = null
 
@@ -38,6 +48,16 @@ class PlaybackService : MediaSessionService() {
                 .build()
                 .apply { setSmallIcon(R.drawable.ic_notification) },
         )
+
+        // Restore the last queue so a relaunch after process death (not just a fresh app start)
+        // has something to resume — prepared but not auto-played.
+        serviceScope.launch {
+            val restored = queueStateStore.load() ?: return@launch
+            val items = restored.items.map { it.toMediaItem() }
+            if (items.isEmpty()) return@launch
+            player.setMediaItems(items, restored.currentIndex.coerceIn(0, items.lastIndex), restored.positionMs)
+            player.prepare()
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =
@@ -49,6 +69,7 @@ class PlaybackService : MediaSessionService() {
             release()
         }
         mediaSession = null
+        serviceScope.cancel()
         super.onDestroy()
     }
 }

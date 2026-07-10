@@ -36,4 +36,7 @@ dependencies {
     implementation(libs.koin.android)
 
     implementation(libs.kotlinx.coroutines.core)
+
+    // Persists just enough of the live queue to restore it after process death.
+    implementation(libs.androidx.datastore.preferences)
 }

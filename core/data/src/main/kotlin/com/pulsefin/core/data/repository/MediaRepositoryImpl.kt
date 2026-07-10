@@ -7,6 +7,8 @@ import com.pulsefin.core.data.local.AlbumDao
 import com.pulsefin.core.data.local.AlbumEntity
 import com.pulsefin.core.data.local.ArtistDao
 import com.pulsefin.core.data.local.ArtistEntity
+import com.pulsefin.core.data.local.PlaylistDao
+import com.pulsefin.core.data.local.PlaylistEntity
 import com.pulsefin.core.data.local.RecentSearchDao
 import com.pulsefin.core.data.local.RecentSearchEntity
 import com.pulsefin.core.data.local.SongDao
@@ -16,10 +18,13 @@ import com.pulsefin.core.domain.model.Artist
 import com.pulsefin.core.domain.model.LyricLine
 import com.pulsefin.core.domain.model.Lyrics
 import com.pulsefin.core.domain.model.MediaId
+import com.pulsefin.core.domain.model.Playlist
 import com.pulsefin.core.domain.model.Song
 import com.pulsefin.core.domain.repository.MediaRepository
 import com.pulsefin.core.domain.repository.SearchResults
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -28,14 +33,27 @@ import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.audioApi
 import org.jellyfin.sdk.api.client.extensions.imageApi
 import org.jellyfin.sdk.api.client.extensions.itemsApi
+import org.jellyfin.sdk.api.client.extensions.libraryApi
 import org.jellyfin.sdk.api.client.extensions.lyricsApi
+import org.jellyfin.sdk.api.client.extensions.playStateApi
+import org.jellyfin.sdk.api.client.extensions.playlistsApi
 import org.jellyfin.sdk.api.client.extensions.userLibraryApi
 import org.jellyfin.sdk.model.api.BaseItemDto
 import org.jellyfin.sdk.model.api.BaseItemKind
+import org.jellyfin.sdk.model.api.CreatePlaylistDto
 import org.jellyfin.sdk.model.api.ImageType
 import org.jellyfin.sdk.model.api.ItemSortBy
+import org.jellyfin.sdk.model.api.MediaType
+import org.jellyfin.sdk.model.api.PlaybackOrder
+import org.jellyfin.sdk.model.api.PlaybackProgressInfo
+import org.jellyfin.sdk.model.api.PlaybackStartInfo
+import org.jellyfin.sdk.model.api.PlaybackStopInfo
+import org.jellyfin.sdk.model.api.PlayMethod
+import org.jellyfin.sdk.model.api.RepeatMode
 import org.jellyfin.sdk.model.api.SortOrder
+import org.jellyfin.sdk.model.api.UpdatePlaylistDto
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
+import org.jellyfin.sdk.model.api.request.GetPlaylistItemsRequest
 import java.util.UUID
 
 /**
@@ -51,12 +69,16 @@ class MediaRepositoryImpl(
     private val albumDao: AlbumDao,
     private val artistDao: ArtistDao,
     private val recentSearchDao: RecentSearchDao,
+    private val playlistDao: PlaylistDao,
 ) : MediaRepository {
 
     private val refreshMutex = Mutex()
 
     @Volatile
     private var hasSyncedThisProcess = false
+
+    private val _lastSyncError = MutableStateFlow<Throwable?>(null)
+    override fun observeLastSyncError(): Flow<Throwable?> = _lastSyncError.asStateFlow()
 
     override fun observeSongs(): Flow<List<Song>> =
         songDao.observeAll().map { rows -> rows.map { it.toSong() } }
@@ -71,21 +93,25 @@ class MediaRepositoryImpl(
         songDao.observeFavoriteIds().map { it.toSet() }
 
     override suspend fun refreshLibrary(force: Boolean): PulseResult<Unit> = withContext(dispatchers.io) {
-        PulseResult.runCatchingResult {
+        val result = PulseResult.runCatchingResult {
             refreshMutex.withLock {
                 // Dedupe the auto-sync the three tabs each kick off; pull-to-refresh forces it.
                 if (hasSyncedThisProcess && !force) return@withLock
                 val api = requireApi()
-                val songs = fetchItems(api, BaseItemKind.AUDIO, limit = 500).map { it.toSong(api) }
-                val albums = fetchItems(api, BaseItemKind.MUSIC_ALBUM).map { it.toAlbum(api) }
-                val artists = fetchItems(api, BaseItemKind.MUSIC_ARTIST).map { it.toArtist(api) }
+                val songs = fetchAllItems(api, BaseItemKind.AUDIO).map { it.toSong(api) }
+                val albums = fetchAllItems(api, BaseItemKind.MUSIC_ALBUM).map { it.toAlbum(api) }
+                val artists = fetchAllItems(api, BaseItemKind.MUSIC_ARTIST).map { it.toArtist(api) }
+                val playlists = fetchAllItems(api, BaseItemKind.PLAYLIST).map { it.toPlaylist(api) }
                 // Atomic swaps -> observers see a single emission, no empty flash.
                 songDao.replaceAll(songs.map { it.toEntity() })
                 albumDao.replaceAll(albums.map { it.toEntity() })
                 artistDao.replaceAll(artists.map { it.toEntity() })
+                playlistDao.replaceAll(playlists.map { it.toEntity() })
                 hasSyncedThisProcess = true
             }
         }
+        _lastSyncError.value = (result as? PulseResult.Failure)?.error
+        result
     }
 
     override suspend fun songsForAlbum(albumId: String): PulseResult<List<Song>> =
@@ -157,6 +183,151 @@ class MediaRepositoryImpl(
             }
         }
 
+    override fun observePlaylists(): Flow<List<Playlist>> =
+        playlistDao.observeAll().map { rows -> rows.map { it.toPlaylist() } }
+
+    override suspend fun createPlaylist(name: String, songIds: List<String>): PulseResult<Unit> =
+        withContext(dispatchers.io) {
+            PulseResult.runCatchingResult {
+                val api = requireApi()
+                val userId = UUID.fromString(requireUserId())
+                api.playlistsApi.createPlaylist(
+                    CreatePlaylistDto(
+                        name = name,
+                        ids = songIds.map { UUID.fromString(it) },
+                        userId = userId,
+                        mediaType = MediaType.AUDIO,
+                        users = emptyList(),
+                        isPublic = false,
+                    ),
+                )
+                refreshPlaylists(api)
+            }
+        }
+
+    override suspend fun renamePlaylist(playlistId: String, name: String): PulseResult<Unit> =
+        withContext(dispatchers.io) {
+            PulseResult.runCatchingResult {
+                val api = requireApi()
+                api.playlistsApi.updatePlaylist(UUID.fromString(playlistId), UpdatePlaylistDto(name = name))
+                refreshPlaylists(api)
+            }
+        }
+
+    override suspend fun deletePlaylist(playlistId: String): PulseResult<Unit> =
+        withContext(dispatchers.io) {
+            PulseResult.runCatchingResult {
+                val api = requireApi()
+                api.libraryApi.deleteItem(UUID.fromString(playlistId))
+                refreshPlaylists(api)
+            }
+        }
+
+    override suspend fun songsForPlaylist(playlistId: String): PulseResult<List<Song>> =
+        withContext(dispatchers.io) {
+            PulseResult.runCatchingResult {
+                val api = requireApi()
+                fetchAllPlaylistItems(api, playlistId).map { item ->
+                    item.toSong(api).copy(playlistItemId = item.playlistItemId)
+                }
+            }
+        }
+
+    override suspend fun addToPlaylist(playlistId: String, songIds: List<String>): PulseResult<Unit> =
+        withContext(dispatchers.io) {
+            PulseResult.runCatchingResult {
+                val api = requireApi()
+                val userId = UUID.fromString(requireUserId())
+                api.playlistsApi.addItemToPlaylist(
+                    UUID.fromString(playlistId),
+                    songIds.map { UUID.fromString(it) },
+                    userId,
+                )
+                refreshPlaylists(api)
+            }
+        }
+
+    override suspend fun removeFromPlaylist(playlistId: String, entryIds: List<String>): PulseResult<Unit> =
+        withContext(dispatchers.io) {
+            PulseResult.runCatchingResult {
+                requireApi().playlistsApi.removeItemFromPlaylist(playlistId, entryIds)
+                Unit
+            }
+        }
+
+    override suspend fun reorderPlaylistItem(
+        playlistId: String,
+        entryId: String,
+        newIndex: Int,
+    ): PulseResult<Unit> = withContext(dispatchers.io) {
+        PulseResult.runCatchingResult {
+            requireApi().playlistsApi.moveItem(playlistId, entryId, newIndex)
+            Unit
+        }
+    }
+
+    // Scrobbling is best-effort telemetry to the user's own Jellyfin server (play history/"now
+    // playing" on other clients) — failures are swallowed rather than surfaced, since a dropped
+    // ping shouldn't interrupt playback or show an error the user can't act on.
+    override suspend fun reportPlaybackStart(songId: String, playSessionId: String) {
+        withContext(dispatchers.io) {
+            runCatching {
+                requireApi().playStateApi.reportPlaybackStart(
+                    PlaybackStartInfo(
+                        itemId = UUID.fromString(songId),
+                        playMethod = PlayMethod.DIRECT_PLAY,
+                        playSessionId = playSessionId,
+                        canSeek = true,
+                        isPaused = false,
+                        isMuted = false,
+                        repeatMode = RepeatMode.REPEAT_NONE,
+                        playbackOrder = PlaybackOrder.DEFAULT,
+                    ),
+                )
+            }
+        }
+    }
+
+    override suspend fun reportPlaybackProgress(
+        songId: String,
+        playSessionId: String,
+        positionMs: Long,
+        isPaused: Boolean,
+    ) {
+        withContext(dispatchers.io) {
+            runCatching {
+                requireApi().playStateApi.reportPlaybackProgress(
+                    PlaybackProgressInfo(
+                        itemId = UUID.fromString(songId),
+                        positionTicks = positionMs * 10_000,
+                        playMethod = PlayMethod.DIRECT_PLAY,
+                        playSessionId = playSessionId,
+                        canSeek = true,
+                        isPaused = isPaused,
+                        isMuted = false,
+                        repeatMode = RepeatMode.REPEAT_NONE,
+                        playbackOrder = PlaybackOrder.DEFAULT,
+                    ),
+                )
+            }
+        }
+    }
+
+    override suspend fun reportPlaybackStopped(songId: String, playSessionId: String, positionMs: Long) {
+        withContext(dispatchers.io) {
+            runCatching {
+                requireApi().playStateApi.reportPlaybackStopped(
+                    PlaybackStopInfo(
+                        itemId = UUID.fromString(songId),
+                        positionTicks = positionMs * 10_000,
+                        playSessionId = playSessionId,
+                        failed = false,
+                    ),
+                )
+            }
+        }
+    }
+
     override suspend fun recentlyAdded(limit: Int): PulseResult<List<Album>> =
         withContext(dispatchers.io) {
             PulseResult.runCatchingResult {
@@ -208,15 +379,64 @@ class MediaRepositoryImpl(
 
     private suspend fun requireApi(): ApiClient = apiProvider.api() ?: error("Not signed in")
 
-    private suspend fun fetchItems(api: ApiClient, type: BaseItemKind, limit: Int? = null): List<BaseItemDto> =
-        api.itemsApi.getItems(
-            GetItemsRequest(
-                includeItemTypes = listOf(type),
-                recursive = true,
-                sortBy = listOf(ItemSortBy.SORT_NAME),
-                limit = limit,
-            ),
-        ).content.items.orEmpty()
+    private suspend fun requireUserId(): String = apiProvider.currentUserId() ?: error("Not signed in")
+
+    private suspend fun refreshPlaylists(api: ApiClient) {
+        val playlists = fetchAllItems(api, BaseItemKind.PLAYLIST).map { it.toPlaylist(api) }
+        playlistDao.replaceAll(playlists.map { it.toEntity() })
+    }
+
+    /** Pages through a playlist's items — same shape as [fetchAllItems] but via the playlist API. */
+    private suspend fun fetchAllPlaylistItems(
+        api: ApiClient,
+        playlistId: String,
+        pageSize: Int = 200,
+    ): List<BaseItemDto> {
+        val out = mutableListOf<BaseItemDto>()
+        var startIndex = 0
+        while (true) {
+            val page = api.playlistsApi.getPlaylistItems(
+                GetPlaylistItemsRequest(
+                    playlistId = UUID.fromString(playlistId),
+                    startIndex = startIndex,
+                    limit = pageSize,
+                ),
+            ).content
+            val items = page.items.orEmpty()
+            if (items.isEmpty()) break
+            out += items
+            if (out.size >= page.totalRecordCount) break
+            startIndex += pageSize
+        }
+        return out
+    }
+
+    /** Pages through the full library for [type] — a single request would silently truncate. */
+    private suspend fun fetchAllItems(
+        api: ApiClient,
+        type: BaseItemKind,
+        pageSize: Int = 200,
+    ): List<BaseItemDto> {
+        val out = mutableListOf<BaseItemDto>()
+        var startIndex = 0
+        while (true) {
+            val page = api.itemsApi.getItems(
+                GetItemsRequest(
+                    includeItemTypes = listOf(type),
+                    recursive = true,
+                    sortBy = listOf(ItemSortBy.SORT_NAME),
+                    startIndex = startIndex,
+                    limit = pageSize,
+                ),
+            ).content
+            val items = page.items.orEmpty()
+            if (items.isEmpty()) break
+            out += items
+            if (out.size >= page.totalRecordCount) break
+            startIndex += pageSize
+        }
+        return out
+    }
 }
 
 // --- Jellyfin DTO -> domain ---
@@ -246,6 +466,13 @@ private fun BaseItemDto.toArtist(api: ApiClient): Artist = Artist(
     artworkUrl = artworkUrl(api),
 )
 
+private fun BaseItemDto.toPlaylist(api: ApiClient): Playlist = Playlist(
+    id = MediaId(id.toString()),
+    name = name ?: "Untitled playlist",
+    artworkUrl = artworkUrl(api),
+    songCount = childCount ?: 0,
+)
+
 private fun BaseItemDto.artworkUrl(api: ApiClient): String? = runCatching {
     // Store the base URL; callers append the size they need via sizedArtUrl (tiny for list
     // thumbnails, larger for the Now Playing hero) so lists stay cheap to scroll.
@@ -264,7 +491,9 @@ private fun ensureApiKey(url: String, token: String?): String {
 private fun Song.toEntity() = SongEntity(id.value, title, albumName, artistName, durationMs, artworkUrl, streamUrl, isFavorite)
 private fun Album.toEntity() = AlbumEntity(id.value, name, artistName, artworkUrl, year)
 private fun Artist.toEntity() = ArtistEntity(id.value, name, artworkUrl)
+private fun Playlist.toEntity() = PlaylistEntity(id.value, name, artworkUrl, songCount)
 
 private fun SongEntity.toSong() = Song(MediaId(id), title, albumName, artistName, durationMs, artworkUrl, streamUrl, isFavorite)
 private fun AlbumEntity.toAlbum() = Album(MediaId(id), name, artistName, artworkUrl, year)
 private fun ArtistEntity.toArtist() = Artist(MediaId(id), name, artworkUrl)
+private fun PlaylistEntity.toPlaylist() = Playlist(MediaId(id), name, artworkUrl, songCount)

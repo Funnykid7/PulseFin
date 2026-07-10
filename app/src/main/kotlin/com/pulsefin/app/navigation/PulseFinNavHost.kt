@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
@@ -36,6 +37,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.ui.unit.dp
@@ -45,6 +48,7 @@ import com.pulsefin.app.ui.components.pressScale
 import com.pulsefin.core.designsystem.theme.searchShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -75,6 +79,8 @@ import com.pulsefin.app.ui.player.LyricsScreen
 import com.pulsefin.app.ui.player.MiniPlayer
 import com.pulsefin.app.ui.player.NowPlayingScreen
 import com.pulsefin.app.ui.player.QueueScreen
+import com.pulsefin.app.ui.playlist.PlaylistDetailScreen
+import com.pulsefin.app.ui.playlist.PlaylistsScreen
 import com.pulsefin.app.ui.search.SearchScreen
 import com.pulsefin.app.ui.theme.ArtworkTheme
 import com.pulsefin.app.ui.theme.LocalArtworkColorScheme
@@ -90,8 +96,10 @@ object Routes {
     const val SONGS = "songs"
     const val ALBUMS = "albums"
     const val ARTISTS = "artists"
+    const val PLAYLISTS = "playlists"
     const val ALBUM_DETAIL = "album/{albumId}?art={art}"
     const val ARTIST_DETAIL = "artist/{artistId}"
+    const val PLAYLIST_DETAIL = "playlist/{playlistId}"
     const val NOWPLAYING = "nowplaying"
     const val QUEUE = "queue"
     const val LYRICS = "lyrics"
@@ -101,6 +109,7 @@ object Routes {
     // can render immediately instead of waiting for the track list to load from the server.
     fun albumDetail(id: String, artUrl: String?) = "album/$id?art=${Uri.encode(artUrl.orEmpty())}"
     fun artistDetail(id: String) = "artist/$id"
+    fun playlistDetail(id: String) = "playlist/$id"
 }
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
@@ -110,6 +119,7 @@ private val tabs = listOf(
     Tab(Routes.SONGS, "Songs", Icons.Filled.LibraryMusic),
     Tab(Routes.ALBUMS, "Albums", Icons.Filled.Album),
     Tab(Routes.ARTISTS, "Artists", Icons.Filled.Person),
+    Tab(Routes.PLAYLISTS, "Playlists", Icons.AutoMirrored.Filled.QueueMusic),
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
@@ -137,6 +147,17 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
     // makes the large title collapse smoothly instead of jumping around.
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
+    // Surface sync failures once, centrally, instead of every screen swallowing its own
+    // refreshLibrary() result — Room keeps serving the last-synced library regardless.
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(mediaRepository) {
+        mediaRepository.observeLastSyncError().collect { error ->
+            if (error != null) {
+                snackbarHostState.showSnackbar("Couldn't sync library — showing your last saved copy.")
+            }
+        }
+    }
+
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val currentTab = tabs.firstOrNull { it.route == currentRoute }
@@ -153,6 +174,7 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             if (isTab) {
                 LargeTopAppBar(
@@ -259,6 +281,12 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                             onArtistClick = { navController.navigate(Routes.artistDetail(it)) },
                         )
                     }
+                    composable(Routes.PLAYLISTS, enterTransition = tabEnter, exitTransition = tabExit) {
+                        PlaylistsScreen(
+                            contentPadding = innerPadding,
+                            onPlaylistClick = { navController.navigate(Routes.playlistDetail(it)) },
+                        )
+                    }
                     composable(
                         route = Routes.ALBUM_DETAIL,
                         arguments = listOf(
@@ -296,6 +324,19 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                                 onBack = { navController.popBackStack() },
                             )
                         }
+                    }
+                    composable(
+                        route = Routes.PLAYLIST_DETAIL,
+                        arguments = listOf(navArgument("playlistId") { type = NavType.StringType }),
+                        enterTransition = { slideInHorizontally { it / 3 } + fadeIn() },
+                        popExitTransition = { slideOutHorizontally { it / 3 } + fadeOut() },
+                    ) { entry ->
+                        PlaylistDetailScreen(
+                            playlistId = entry.arguments?.getString("playlistId").orEmpty(),
+                            contentPadding = innerPadding,
+                            currentMediaId = playbackState.currentMediaId,
+                            onBack = { navController.popBackStack() },
+                        )
                     }
                     composable(
                         Routes.NOWPLAYING,

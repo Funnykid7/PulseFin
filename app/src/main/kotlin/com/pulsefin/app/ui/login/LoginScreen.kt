@@ -12,10 +12,12 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -27,6 +29,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -50,6 +57,7 @@ import org.koin.androidx.compose.koinViewModel
  * Set-and-forget login. Once authenticated the session persists, so this screen is only
  * seen on first launch or after an explicit sign-out.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(viewModel: LoginViewModel = koinViewModel()) {
     val state = viewModel.uiState
@@ -110,16 +118,12 @@ fun LoginScreen(viewModel: LoginViewModel = koinViewModel()) {
                     modifier = Modifier.padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    OutlinedTextField(
-                        value = state.server,
-                        onValueChange = viewModel::onServerChange,
-                        label = { Text("Server URL") },
-                        leadingIcon = { Icon(Icons.Filled.Dns, contentDescription = null) },
-                        singleLine = true,
+                    ServerAddressField(
+                        scheme = state.serverScheme,
+                        onSchemeChange = viewModel::onServerSchemeChange,
+                        host = state.serverHost,
+                        onHostChange = viewModel::onServerHostChange,
                         enabled = !state.isSubmitting,
-                        shape = MaterialTheme.shapes.medium,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                        modifier = Modifier.fillMaxWidth(),
                     )
                     OutlinedTextField(
                         value = state.username,
@@ -186,5 +190,66 @@ fun LoginScreen(viewModel: LoginViewModel = koinViewModel()) {
             }
         }
         }
+    }
+}
+
+private val schemeOptions = listOf("http", "https")
+
+/** Protocol dropdown + bare host[:port] field, so users don't have to type "http://" by hand. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ServerAddressField(
+    scheme: String,
+    onSchemeChange: (String) -> Unit,
+    host: String,
+    onHostChange: (String) -> Unit,
+    enabled: Boolean,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { if (enabled) expanded = it },
+            modifier = Modifier.width(140.dp),
+        ) {
+            OutlinedTextField(
+                value = "$scheme://",
+                onValueChange = {},
+                readOnly = true,
+                enabled = enabled,
+                singleLine = true,
+                shape = MaterialTheme.shapes.medium,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                modifier = Modifier
+                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                    .fillMaxWidth(),
+            )
+            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                schemeOptions.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text("$option://") },
+                        onClick = {
+                            onSchemeChange(option)
+                            expanded = false
+                        },
+                    )
+                }
+            }
+        }
+        OutlinedTextField(
+            value = host,
+            onValueChange = onHostChange,
+            label = { Text("Server") },
+            leadingIcon = { Icon(Icons.Filled.Dns, contentDescription = null) },
+            singleLine = true,
+            enabled = enabled,
+            shape = MaterialTheme.shapes.medium,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            modifier = Modifier.weight(1f),
+        )
     }
 }
