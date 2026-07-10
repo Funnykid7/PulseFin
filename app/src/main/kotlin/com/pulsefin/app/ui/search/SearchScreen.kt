@@ -1,20 +1,25 @@
 package com.pulsefin.app.ui.search
 
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -31,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulsefin.app.ui.components.MediaRow
 import com.pulsefin.app.ui.components.bouncyClickable
 import com.pulsefin.app.ui.components.pressScale
@@ -48,6 +54,8 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
+private const val RECENT_SEARCHES_LIMIT = 12
+
 data class SearchUiState(
     val query: String = "",
     val isSearching: Boolean = false,
@@ -60,6 +68,8 @@ class SearchViewModel(
 ) : ViewModel() {
     var uiState by mutableStateOf(SearchUiState())
         private set
+
+    val recentSearches = repository.observeRecentSearches(RECENT_SEARCHES_LIMIT)
 
     private val queryFlow = MutableStateFlow("")
 
@@ -85,9 +95,14 @@ class SearchViewModel(
             results = (result as? PulseResult.Success)?.data
                 ?: SearchResults(emptyList(), emptyList(), emptyList()),
         )
+        if (result is PulseResult.Success) repository.recordSearch(query)
     }
 
     fun playSong(index: Int) = playbackController.play(uiState.results.songs, index)
+
+    fun removeRecentSearch(query: String) = viewModelScope.launch { repository.removeRecentSearch(query) }
+
+    fun clearRecentSearches() = viewModelScope.launch { repository.clearRecentSearches() }
 }
 
 @Composable
@@ -100,6 +115,7 @@ fun SearchScreen(
 ) {
     val state = viewModel.uiState
     val results = state.results
+    val recentSearches by viewModel.recentSearches.collectAsStateWithLifecycle(emptyList())
 
     Column(
         modifier = Modifier
@@ -144,6 +160,32 @@ fun SearchScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
         ) {
+            if (state.query.isBlank()) {
+                if (recentSearches.isNotEmpty()) {
+                    item {
+                        androidx.compose.foundation.layout.Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            SectionHeader("Recent Searches")
+                            TextButton(
+                                onClick = { viewModel.clearRecentSearches() },
+                                modifier = Modifier.padding(end = 8.dp),
+                            ) { Text("Clear all") }
+                        }
+                    }
+                    items(recentSearches, key = { "rs-$it" }) { query ->
+                        RecentSearchRow(
+                            query = query,
+                            onClick = { viewModel.onQueryChange(query) },
+                            onRemove = { viewModel.removeRecentSearch(query) },
+                            modifier = Modifier.animateItem(),
+                        )
+                    }
+                }
+                return@LazyColumn
+            }
             if (results.songs.isNotEmpty()) {
                 item { SectionHeader("Songs") }
                 itemsIndexed(
@@ -204,6 +246,45 @@ private fun SectionHeader(text: String) {
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
     )
+}
+
+@Composable
+private fun RecentSearchRow(
+    query: String,
+    onClick: () -> Unit,
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    androidx.compose.foundation.layout.Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .bouncyClickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Filled.History,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = query,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 16.dp),
+        )
+        val removeInteraction = remember { MutableInteractionSource() }
+        IconButton(
+            onClick = onRemove,
+            modifier = Modifier.pressScale(removeInteraction, pressedScale = 0.9f),
+            interactionSource = removeInteraction,
+        ) {
+            Icon(Icons.Filled.Close, contentDescription = "Remove")
+        }
+    }
 }
 
 @Composable

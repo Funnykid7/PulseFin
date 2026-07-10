@@ -1,5 +1,6 @@
 package com.pulsefin.app.ui.player
 
+import android.view.HapticFeedbackConstants
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -56,6 +57,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -130,6 +132,7 @@ private fun NowPlayingContent(
 ) {
     val sleepRemainingMs by playbackController.sleepRemainingMs.collectAsStateWithLifecycle()
     var showSleepSheet by remember { mutableStateOf(false) }
+    val view = LocalView.current
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -138,7 +141,12 @@ private fun NowPlayingContent(
                 detectVerticalDragGestures(
                     onDragStart = { totalDrag = 0f },
                     onVerticalDrag = { _, dragAmount -> totalDrag += dragAmount },
-                    onDragEnd = { if (totalDrag > 220f) onCollapse() },
+                    onDragEnd = {
+                        if (totalDrag > 220f) {
+                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                            onCollapse()
+                        }
+                    },
                 )
             }
             // Use stable system-bar insets, not the Scaffold's contentPadding: the bottom bar

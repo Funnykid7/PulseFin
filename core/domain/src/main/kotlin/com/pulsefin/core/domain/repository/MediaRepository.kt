@@ -40,6 +40,16 @@ interface MediaRepository {
 
     /** Timed or plain lyrics for a song; a [Failure] or empty result means none are available. */
     suspend fun lyrics(songId: String): PulseResult<Lyrics>
+
+    /** Past search queries, newest first, for quick re-run from the Search screen. */
+    fun observeRecentSearches(limit: Int): Flow<List<String>>
+
+    /** Records a completed search query, bumping it to the top if already present. */
+    suspend fun recordSearch(query: String)
+
+    suspend fun removeRecentSearch(query: String)
+
+    suspend fun clearRecentSearches()
 }
 
 data class SearchResults(

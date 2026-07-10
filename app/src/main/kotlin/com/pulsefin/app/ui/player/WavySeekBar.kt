@@ -1,5 +1,6 @@
 package com.pulsefin.app.ui.player
 
+import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 
 /**
@@ -43,6 +45,7 @@ fun WavySeekBar(
         0f
     }
     val fraction = scrub ?: playbackFraction
+    val view = LocalView.current
 
     Column(modifier = modifier.fillMaxWidth()) {
         Box(
@@ -52,6 +55,7 @@ fun WavySeekBar(
                 .pointerInput(durationMs) {
                     detectTapGestures { offset ->
                         if (durationMs > 0) {
+                            view.performHapticFeedback(HapticFeedbackConstants.SEGMENT_TICK)
                             val f = (offset.x / size.width).coerceIn(0f, 1f)
                             onSeek((f * durationMs).toLong())
                         }
@@ -60,6 +64,7 @@ fun WavySeekBar(
                 .pointerInput(durationMs) {
                     detectHorizontalDragGestures(
                         onDragStart = { offset ->
+                            view.performHapticFeedback(HapticFeedbackConstants.SEGMENT_TICK)
                             scrub = (offset.x / size.width).coerceIn(0f, 1f)
                         },
                         onHorizontalDrag = { change, _ ->

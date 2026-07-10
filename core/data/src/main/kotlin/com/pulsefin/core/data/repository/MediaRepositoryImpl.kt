@@ -7,6 +7,8 @@ import com.pulsefin.core.data.local.AlbumDao
 import com.pulsefin.core.data.local.AlbumEntity
 import com.pulsefin.core.data.local.ArtistDao
 import com.pulsefin.core.data.local.ArtistEntity
+import com.pulsefin.core.data.local.RecentSearchDao
+import com.pulsefin.core.data.local.RecentSearchEntity
 import com.pulsefin.core.data.local.SongDao
 import com.pulsefin.core.data.local.SongEntity
 import com.pulsefin.core.domain.model.Album
@@ -48,6 +50,7 @@ class MediaRepositoryImpl(
     private val songDao: SongDao,
     private val albumDao: AlbumDao,
     private val artistDao: ArtistDao,
+    private val recentSearchDao: RecentSearchDao,
 ) : MediaRepository {
 
     private val refreshMutex = Mutex()
@@ -183,6 +186,25 @@ class MediaRepositoryImpl(
                 )
             }
         }
+
+    override fun observeRecentSearches(limit: Int): Flow<List<String>> =
+        recentSearchDao.observeRecent(limit).map { rows -> rows.map { it.query } }
+
+    override suspend fun recordSearch(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) return
+        withContext(dispatchers.io) {
+            recentSearchDao.upsert(RecentSearchEntity(trimmed, System.currentTimeMillis()))
+        }
+    }
+
+    override suspend fun removeRecentSearch(query: String) = withContext(dispatchers.io) {
+        recentSearchDao.delete(query)
+    }
+
+    override suspend fun clearRecentSearches() = withContext(dispatchers.io) {
+        recentSearchDao.clearAll()
+    }
 
     private suspend fun requireApi(): ApiClient = apiProvider.api() ?: error("Not signed in")
 

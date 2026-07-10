@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import android.view.HapticFeedbackConstants
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -22,6 +23,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -30,10 +32,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pulsefin.app.ui.components.pressScale
 import com.pulsefin.app.ui.theme.ArtworkTheme
 import com.pulsefin.core.common.result.PulseResult
 import com.pulsefin.core.domain.model.Lyrics
@@ -85,6 +89,7 @@ fun LyricsScreen(
 
                 val synced = current?.isSynced == true
                 if (synced) {
+                    val view = LocalView.current
                     SingleChoiceSegmentedButtonRow(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -92,12 +97,18 @@ fun LyricsScreen(
                     ) {
                         SegmentedButton(
                             selected = mode == LyricsMode.Synced,
-                            onClick = { mode = LyricsMode.Synced },
+                            onClick = {
+                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                mode = LyricsMode.Synced
+                            },
                             shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
                         ) { Text("Synced") }
                         SegmentedButton(
                             selected = mode == LyricsMode.Static,
-                            onClick = { mode = LyricsMode.Static },
+                            onClick = {
+                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                mode = LyricsMode.Static
+                            },
                             shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
                         ) { Text("Static") }
                     }
@@ -125,7 +136,12 @@ private fun LyricsTopBar(onBack: () -> Unit, title: String) {
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onBack) {
+        val backInteraction = remember { MutableInteractionSource() }
+        IconButton(
+            onClick = onBack,
+            modifier = Modifier.pressScale(backInteraction, pressedScale = 0.9f),
+            interactionSource = backInteraction,
+        ) {
             Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
         }
         Text(
