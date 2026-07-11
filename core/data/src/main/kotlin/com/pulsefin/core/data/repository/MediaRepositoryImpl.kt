@@ -466,17 +466,31 @@ private fun BaseItemDto.toArtist(api: ApiClient): Artist = Artist(
     artworkUrl = artworkUrl(api),
 )
 
-private fun BaseItemDto.toPlaylist(api: ApiClient): Playlist = Playlist(
-    id = MediaId(id.toString()),
-    name = name ?: "Untitled playlist",
-    artworkUrl = artworkUrl(api),
-    songCount = childCount ?: 0,
-)
+private suspend fun BaseItemDto.toPlaylist(api: ApiClient): Playlist {
+    val memberArt = runCatching {
+        api.playlistsApi.getPlaylistItems(
+            GetPlaylistItemsRequest(playlistId = id, startIndex = 0, limit = 4),
+        ).content.items.orEmpty().mapNotNull { it.artworkUrl(api) }
+    }.getOrDefault(emptyList())
+    return Playlist(
+        id = MediaId(id.toString()),
+        name = name ?: "Untitled playlist",
+        artworkUrl = artworkUrl(api),
+        songCount = childCount ?: 0,
+        memberArtworkUrls = memberArt,
+    )
+}
 
 private fun BaseItemDto.artworkUrl(api: ApiClient): String? = runCatching {
+    // Only build a URL when the item actually has a Primary image (imageTags is the source of
+    // truth) — otherwise items with no art (e.g. an empty playlist) get a URL that 404s instead
+    // of null, which skips the UI's placeholder. The tag is also passed through as a cache-busting
+    // query param so Coil's URL-keyed cache can't serve stale bytes for a different item that
+    // happens to reuse the same id (observed with recreated same-named playlists).
+    val tag = imageTags?.get(ImageType.PRIMARY) ?: return@runCatching null
     // Store the base URL; callers append the size they need via sizedArtUrl (tiny for list
     // thumbnails, larger for the Now Playing hero) so lists stay cheap to scroll.
-    api.imageApi.getItemImageUrl(itemId = id, imageType = ImageType.PRIMARY)
+    api.imageApi.getItemImageUrl(itemId = id, imageType = ImageType.PRIMARY, tag = tag)
 }.getOrNull()
 
 /** Direct-play URLs must carry auth for ExoPlayer; append the token if the SDK didn't. */
@@ -491,9 +505,16 @@ private fun ensureApiKey(url: String, token: String?): String {
 private fun Song.toEntity() = SongEntity(id.value, title, albumName, artistName, durationMs, artworkUrl, streamUrl, isFavorite)
 private fun Album.toEntity() = AlbumEntity(id.value, name, artistName, artworkUrl, year)
 private fun Artist.toEntity() = ArtistEntity(id.value, name, artworkUrl)
-private fun Playlist.toEntity() = PlaylistEntity(id.value, name, artworkUrl, songCount)
+private fun Playlist.toEntity() =
+    PlaylistEntity(id.value, name, artworkUrl, songCount, memberArtworkUrls.joinToString("|"))
 
 private fun SongEntity.toSong() = Song(MediaId(id), title, albumName, artistName, durationMs, artworkUrl, streamUrl, isFavorite)
 private fun AlbumEntity.toAlbum() = Album(MediaId(id), name, artistName, artworkUrl, year)
 private fun ArtistEntity.toArtist() = Artist(MediaId(id), name, artworkUrl)
-private fun PlaylistEntity.toPlaylist() = Playlist(MediaId(id), name, artworkUrl, songCount)
+private fun PlaylistEntity.toPlaylist() = Playlist(
+    MediaId(id),
+    name,
+    artworkUrl,
+    songCount,
+    if (memberArtworkUrls.isEmpty()) emptyList() else memberArtworkUrls.split("|"),
+)

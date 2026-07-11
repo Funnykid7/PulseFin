@@ -58,6 +58,9 @@ data class PlaylistEntity(
     val name: String,
     val artworkUrl: String?,
     val songCount: Int,
+    // '|'-joined member art URLs (up to 4) — plain-string column, matching this file's existing
+    // hand-rolled entity<->domain mapping style rather than adding a Room TypeConverter.
+    val memberArtworkUrls: String = "",
 )
 
 @Dao
@@ -160,7 +163,7 @@ interface PlaylistDao {
         SongEntity::class, AlbumEntity::class, ArtistEntity::class, RecentSearchEntity::class,
         PlaylistEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 abstract class PulseFinDatabase : RoomDatabase() {

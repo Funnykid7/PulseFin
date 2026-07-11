@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -161,34 +163,7 @@ private fun PlaylistCard(playlist: Playlist, onClick: () -> Unit, modifier: Modi
     Column(
         modifier = modifier.bouncyClickable(pressedScale = 0.95f, onClick = onClick),
     ) {
-        if (playlist.artworkUrl != null) {
-            AsyncImage(
-                model = sizedArtUrl(playlist.artworkUrl, 180),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
-                    .clip(SquircleShape),
-            )
-        } else {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
-                    .clip(SquircleShape),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.QueueMusic,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(32.dp),
-                    )
-                }
-            }
-        }
+        PlaylistArt(playlist)
         Text(
             text = playlist.name,
             style = MaterialTheme.typography.titleSmall,
@@ -204,5 +179,74 @@ private fun PlaylistCard(playlist: Playlist, onClick: () -> Unit, modifier: Modi
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+/**
+ * Empty playlists get an icon placeholder, single-song playlists get one full-bleed cover, and
+ * multi-song playlists get a real 2x2 collage of up to 4 distinct songs' art (not the server's
+ * auto-generated composite, which only reflects the playlist's first song).
+ */
+@Composable
+private fun PlaylistArt(playlist: Playlist) {
+    val tileModifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(SquircleShape)
+    val art = playlist.memberArtworkUrls
+    when {
+        playlist.songCount <= 0 -> PlaylistArtPlaceholder(tileModifier)
+        art.size <= 1 -> {
+            val url = art.firstOrNull() ?: playlist.artworkUrl
+            if (url != null) {
+                AsyncImage(
+                    model = sizedArtUrl(url, 180),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = tileModifier,
+                )
+            } else {
+                PlaylistArtPlaceholder(tileModifier)
+            }
+        }
+        else -> {
+            Surface(modifier = tileModifier, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        CollageQuadrant(art.getOrNull(0), Modifier.weight(1f).fillMaxHeight())
+                        CollageQuadrant(art.getOrNull(1), Modifier.weight(1f).fillMaxHeight())
+                    }
+                    Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        CollageQuadrant(art.getOrNull(2), Modifier.weight(1f).fillMaxHeight())
+                        CollageQuadrant(art.getOrNull(3), Modifier.weight(1f).fillMaxHeight())
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CollageQuadrant(url: String?, modifier: Modifier) {
+    if (url != null) {
+        AsyncImage(
+            model = sizedArtUrl(url, 180),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = modifier,
+        )
+    } else {
+        Box(modifier = modifier)
+    }
+}
+
+@Composable
+private fun PlaylistArtPlaceholder(modifier: Modifier) {
+    Surface(modifier = modifier, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                Icons.AutoMirrored.Filled.QueueMusic,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(32.dp),
+            )
+        }
     }
 }

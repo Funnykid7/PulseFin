@@ -102,6 +102,15 @@ class PlaybackController(private val context: Context, private val queueStateSto
     private val _queue = MutableStateFlow<List<QueueItem>>(emptyList())
     val queue: StateFlow<List<QueueItem>> = _queue.asStateFlow()
 
+    // Set right after playNext() moves/inserts a song, so QueueScreen can scroll to and highlight
+    // it — otherwise the move happens with no visible confirmation. Cleared once consumed.
+    private val _lastMovedMediaId = MutableStateFlow<String?>(null)
+    val lastMovedMediaId: StateFlow<String?> = _lastMovedMediaId.asStateFlow()
+
+    fun consumeLastMoved() {
+        _lastMovedMediaId.value = null
+    }
+
     // Sleep timer: milliseconds until playback auto-pauses, or null when no timer is set.
     private val _sleepRemainingMs = MutableStateFlow<Long?>(null)
     val sleepRemainingMs: StateFlow<Long?> = _sleepRemainingMs.asStateFlow()
@@ -259,12 +268,25 @@ class PlaybackController(private val context: Context, private val queueStateSto
         }
     }
 
-    /** Inserts [song] to play right after the current item, without disturbing playback. */
+    /**
+     * Makes [song] play right after the current item, without disturbing playback. If it's
+     * already somewhere in the queue, moves that existing entry instead of inserting a duplicate.
+     */
     fun playNext(song: Song) {
         val item = song.toMediaItem() ?: return
         withController { controller ->
             val insertAt = (controller.currentMediaItemIndex + 1).coerceIn(0, controller.mediaItemCount)
-            controller.addMediaItem(insertAt, item)
+            val existingIndex = (0 until controller.mediaItemCount)
+                .firstOrNull { controller.getMediaItemAt(it).mediaId == item.mediaId }
+            if (existingIndex != null) {
+                // moveMediaItem's target index is relative to the timeline *after* the source item
+                // is removed, so a target past the removal point shifts left by one.
+                val target = if (existingIndex < insertAt) insertAt - 1 else insertAt
+                if (existingIndex != target) controller.moveMediaItem(existingIndex, target)
+            } else {
+                controller.addMediaItem(insertAt, item)
+            }
+            _lastMovedMediaId.value = song.id.value
         }
     }
 

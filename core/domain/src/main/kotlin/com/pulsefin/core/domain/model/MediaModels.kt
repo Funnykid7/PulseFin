@@ -45,6 +45,8 @@ data class Playlist(
     val name: String,
     val artworkUrl: String? = null,
     val songCount: Int = 0,
+    /** Art of up to the first 4 songs, for a per-song collage tile — distinct from [artworkUrl]. */
+    val memberArtworkUrls: List<String> = emptyList(),
 )
 
 /** One line of lyrics; [startMs] is null for unsynced (plain-text) lyrics. */

@@ -57,8 +57,13 @@ fun AddToPlaylistSheet(
                 headlineContent = { Text(playlist.name) },
                 leadingContent = { Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null) },
                 modifier = Modifier.bouncyClickable(onClick = {
-                    scope.launch { repository.addToPlaylist(playlist.id.value, listOf(songId)) }
-                    onDismiss()
+                    // Dismissing removes this composable (and its rememberCoroutineScope) from
+                    // composition, which would cancel addToPlaylist() mid-flight if dismissal
+                    // happened first — await it, then dismiss.
+                    scope.launch {
+                        repository.addToPlaylist(playlist.id.value, listOf(songId))
+                        onDismiss()
+                    }
                 }),
             )
         }
@@ -69,9 +74,11 @@ fun AddToPlaylistSheet(
         NewPlaylistDialog(
             onDismiss = { showCreateDialog = false },
             onCreate = { name ->
-                scope.launch { repository.createPlaylist(name, listOf(songId)) }
                 showCreateDialog = false
-                onDismiss()
+                scope.launch {
+                    repository.createPlaylist(name, listOf(songId))
+                    onDismiss()
+                }
             },
         )
     }

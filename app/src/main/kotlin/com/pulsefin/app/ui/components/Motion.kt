@@ -16,6 +16,7 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
@@ -41,13 +42,24 @@ fun Modifier.pressScale(
     interactionSource: InteractionSource,
     pressedScale: Float = 0.86f,
 ): Modifier = composed {
-    val pressed by interactionSource.collectIsPressedAsState()
+    val view = LocalView.current
     // A light tactile tick the instant a press begins. Because bouncyClickable also routes through
     // pressScale, this gives every button, row, and card in the app consistent tap haptics.
-    val view = LocalView.current
-    LaunchedEffect(pressed) {
-        if (pressed) view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+    //
+    // Collect the raw interaction stream directly rather than via collectIsPressedAsState(): that
+    // helper adds a state-write + recomposition hop between the press and this effect re-running,
+    // and under load (e.g. right after a previous tap kicked off playback/recomposition) that hop
+    // can get delayed enough frames that the haptic silently drops while onClick — unaffected by
+    // recomposition scheduling — still fires normally. Reacting to the Press event directly removes
+    // that hop.
+    LaunchedEffect(interactionSource) {
+        interactionSource.interactions.collect { interaction ->
+            if (interaction is PressInteraction.Press) {
+                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            }
+        }
     }
+    val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) pressedScale else 1f,
         animationSpec = spring(
