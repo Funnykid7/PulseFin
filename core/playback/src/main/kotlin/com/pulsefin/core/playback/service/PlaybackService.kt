@@ -3,7 +3,9 @@ package com.pulsefin.core.playback.service
 import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Intent
+import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -25,13 +27,16 @@ import org.koin.android.ext.android.inject
 class PlaybackService : MediaSessionService() {
 
     private val queueStateStore: QueueStateStore by inject()
+    private val cacheDataSourceFactory: CacheDataSource.Factory by inject()
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private var mediaSession: MediaSession? = null
 
     override fun onCreate() {
         super.onCreate()
-        val player = ExoPlayer.Builder(this).build()
+        val player = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(cacheDataSourceFactory))
+            .build()
         val sessionActivity = PendingIntent.getActivity(
             this,
             0,
