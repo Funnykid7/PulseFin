@@ -3,6 +3,7 @@ package com.pulsefin.core.data.repository
 import com.pulsefin.core.common.dispatchers.AppDispatchers
 import com.pulsefin.core.common.result.PulseResult
 import com.pulsefin.core.data.jellyfin.JellyfinApiProvider
+import com.pulsefin.core.data.jellyfin.ensureApiKey
 import com.pulsefin.core.data.local.AlbumDao
 import com.pulsefin.core.data.local.AlbumEntity
 import com.pulsefin.core.data.local.ArtistDao
@@ -492,13 +493,6 @@ private fun BaseItemDto.artworkUrl(api: ApiClient): String? = runCatching {
     // thumbnails, larger for the Now Playing hero) so lists stay cheap to scroll.
     api.imageApi.getItemImageUrl(itemId = id, imageType = ImageType.PRIMARY, tag = tag)
 }.getOrNull()
-
-/** Direct-play URLs must carry auth for ExoPlayer; append the token if the SDK didn't. */
-private fun ensureApiKey(url: String, token: String?): String {
-    if (token.isNullOrBlank() || url.contains("api_key=", ignoreCase = true)) return url
-    val separator = if (url.contains('?')) '&' else '?'
-    return "$url${separator}api_key=$token"
-}
 
 // --- domain <-> Room entity ---
 

@@ -158,12 +158,43 @@ interface PlaylistDao {
     }
 }
 
+@Entity(tableName = "downloads")
+data class DownloadEntity(
+    @PrimaryKey val songId: String,
+    val title: String,
+    val artistName: String,
+    val artworkUrl: String?,
+    val state: String,
+    val progressPercent: Int = 0,
+    val bytesDownloaded: Long = 0L,
+    val totalBytes: Long = 0L,
+    val updatedAtMs: Long = 0L,
+)
+
+@Dao
+interface DownloadDao {
+    @Query("SELECT * FROM downloads ORDER BY updatedAtMs DESC")
+    fun observeAll(): Flow<List<DownloadEntity>>
+
+    @Query("SELECT * FROM downloads WHERE songId = :songId")
+    fun observeBySongId(songId: String): Flow<DownloadEntity?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: DownloadEntity)
+
+    @Query("DELETE FROM downloads WHERE songId = :songId")
+    suspend fun delete(songId: String)
+
+    @Query("DELETE FROM downloads")
+    suspend fun clearAll()
+}
+
 @Database(
     entities = [
         SongEntity::class, AlbumEntity::class, ArtistEntity::class, RecentSearchEntity::class,
-        PlaylistEntity::class,
+        PlaylistEntity::class, DownloadEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = false,
 )
 abstract class PulseFinDatabase : RoomDatabase() {
@@ -172,6 +203,7 @@ abstract class PulseFinDatabase : RoomDatabase() {
     abstract fun artistDao(): ArtistDao
     abstract fun recentSearchDao(): RecentSearchDao
     abstract fun playlistDao(): PlaylistDao
+    abstract fun downloadDao(): DownloadDao
 
     companion object {
         fun build(context: Context): PulseFinDatabase =

@@ -4,8 +4,10 @@ import com.pulsefin.core.common.dispatchers.AppDispatchers
 import com.pulsefin.core.common.dispatchers.DefaultAppDispatchers
 import com.pulsefin.core.data.jellyfin.JellyfinApiProvider
 import com.pulsefin.core.data.jellyfin.JellyfinClientFactory
+import com.pulsefin.core.data.jellyfin.StreamUrlResolverImpl
 import com.pulsefin.core.data.local.AlbumDao
 import com.pulsefin.core.data.local.ArtistDao
+import com.pulsefin.core.data.local.DownloadDao
 import com.pulsefin.core.data.local.PlaylistDao
 import com.pulsefin.core.data.local.PulseFinDatabase
 import com.pulsefin.core.data.local.RecentSearchDao
@@ -15,6 +17,7 @@ import com.pulsefin.core.data.repository.AuthRepositoryImpl
 import com.pulsefin.core.data.repository.MediaRepositoryImpl
 import com.pulsefin.core.domain.repository.AuthRepository
 import com.pulsefin.core.domain.repository.MediaRepository
+import com.pulsefin.core.domain.repository.StreamUrlResolver
 import org.jellyfin.sdk.Jellyfin
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.Module
@@ -36,10 +39,12 @@ val dataModule: Module = module {
     single<ArtistDao> { get<PulseFinDatabase>().artistDao() }
     single<RecentSearchDao> { get<PulseFinDatabase>().recentSearchDao() }
     single<PlaylistDao> { get<PulseFinDatabase>().playlistDao() }
+    single<DownloadDao> { get<PulseFinDatabase>().downloadDao() }
 
     single { SessionStore(androidContext(), get()) }
     single { JellyfinApiProvider(get(), get()) }
 
     single<AuthRepository> { AuthRepositoryImpl(get(), get(), get()) }
     single<MediaRepository> { MediaRepositoryImpl(get(), get(), get(), get(), get(), get(), get()) }
+    single<StreamUrlResolver> { StreamUrlResolverImpl(get()) }
 }
