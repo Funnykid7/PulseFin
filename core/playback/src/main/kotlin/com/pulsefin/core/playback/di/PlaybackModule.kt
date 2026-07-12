@@ -9,6 +9,7 @@ import androidx.media3.datasource.cache.NoOpCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.offline.DownloadManager
 import com.pulsefin.core.domain.repository.DownloadRepository
+import com.pulsefin.core.domain.repository.DownloadRequirementsProvider
 import com.pulsefin.core.domain.repository.StreamUrlResolver
 import com.pulsefin.core.playback.controller.PlaybackController
 import com.pulsefin.core.playback.download.DownloadRepositoryImpl
@@ -56,5 +57,7 @@ val playbackModule: Module = module {
             Executors.newFixedThreadPool(2),
         )
     }
-    single<DownloadRepository> { DownloadRepositoryImpl(androidContext(), get(), get<StreamUrlResolver>()) }
+    single<DownloadRepository> {
+        DownloadRepositoryImpl(androidContext(), get(), get<StreamUrlResolver>(), get<DownloadRequirementsProvider>())
+    }
 }
