@@ -6,6 +6,7 @@ import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.pulsefin.app.di.appModule
+import com.pulsefin.app.download.DownloadStateSync
 import com.pulsefin.app.playback.PlaybackScrobbler
 import com.pulsefin.core.data.di.dataModule
 import com.pulsefin.core.playback.di.playbackModule
@@ -23,6 +24,7 @@ class PulseFinApp : Application(), ImageLoaderFactory {
             modules(dataModule, playbackModule, appModule)
         }
         koinApp.koin.get<PlaybackScrobbler>().start()
+        koinApp.koin.get<DownloadStateSync>().start()
     }
 
     /**

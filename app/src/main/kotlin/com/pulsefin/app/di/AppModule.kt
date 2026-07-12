@@ -1,5 +1,6 @@
 package com.pulsefin.app.di
 
+import com.pulsefin.app.download.DownloadStateSync
 import com.pulsefin.app.playback.PlaybackScrobbler
 import com.pulsefin.app.ui.home.HomeViewModel
 import com.pulsefin.app.ui.home.YourMixViewModel
@@ -21,6 +22,7 @@ import org.koin.dsl.module
  */
 val appModule: Module = module {
     single { PlaybackScrobbler(get(), get()) }
+    single { DownloadStateSync(get(), get(), get()) }
     viewModelOf(::LoginViewModel)
     viewModelOf(::YourMixViewModel)
     viewModelOf(::HomeViewModel)
