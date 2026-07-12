@@ -3,6 +3,7 @@ package com.pulsefin.core.playback.di
 import androidx.media3.database.DatabaseProvider
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.NoOpCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
@@ -14,6 +15,7 @@ import com.pulsefin.core.playback.download.DownloadRepositoryImpl
 import com.pulsefin.core.playback.queue.QueueStateStore
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.Module
+import org.koin.dsl.bind
 import org.koin.dsl.module
 import java.io.File
 import java.util.concurrent.Executors
@@ -36,7 +38,7 @@ val playbackModule: Module = module {
             NoOpCacheEvictor(),
             get<DatabaseProvider>(),
         )
-    }
+    } bind Cache::class
     // Playback-side: READ-ONLY against the shared cache (see global constraint above) — ordinary
     // streaming must never write into this cache or disk usage grows unbounded.
     single<CacheDataSource.Factory> {
