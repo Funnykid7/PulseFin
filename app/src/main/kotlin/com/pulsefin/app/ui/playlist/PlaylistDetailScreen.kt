@@ -1,9 +1,11 @@
 package com.pulsefin.app.ui.playlist
 
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +17,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
@@ -29,6 +33,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -49,13 +54,16 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.pulsefin.app.ui.components.DownloadStateIndicator
 import com.pulsefin.app.ui.components.MediaRow
 import com.pulsefin.app.ui.components.bouncyClickable
 import com.pulsefin.app.ui.components.pressScale
 import com.pulsefin.core.common.result.PulseResult
 import com.pulsefin.core.common.util.sizedArtUrl
+import com.pulsefin.core.domain.model.DownloadState
 import com.pulsefin.core.domain.model.Playlist
 import com.pulsefin.core.domain.model.Song
+import com.pulsefin.core.domain.repository.DownloadRepository
 import com.pulsefin.core.domain.repository.MediaRepository
 import com.pulsefin.core.playback.controller.PlaybackController
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -79,6 +87,7 @@ data class PlaylistDetailUiState(
 class PlaylistDetailViewModel(
     private val repository: MediaRepository,
     private val playbackController: PlaybackController,
+    private val downloadRepository: DownloadRepository,
 ) : ViewModel() {
     var uiState by mutableStateOf(PlaylistDetailUiState())
         private set
@@ -87,6 +96,10 @@ class PlaylistDetailViewModel(
     val playlist: StateFlow<Playlist?> = _playlistId.filterNotNull().flatMapLatest { id ->
         repository.observePlaylists().map { list -> list.firstOrNull { it.id.value == id } }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val downloadStates: StateFlow<Map<String, DownloadState>> = downloadRepository.observeDownloads()
+        .map { downloads -> downloads.mapValues { it.value.state } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     fun load(playlistId: String) {
         if (_playlistId.value == playlistId) return
@@ -117,6 +130,23 @@ class PlaylistDetailViewModel(
         }
     }
 
+    fun toggleDownload(song: Song) = viewModelScope.launch {
+        if (downloadStates.value[song.id.value] == DownloadState.COMPLETED) {
+            downloadRepository.remove(song.id.value)
+        } else {
+            downloadRepository.download(song)
+        }
+    }
+
+    fun downloadAllOrRemoveAll() = viewModelScope.launch {
+        val songs = uiState.songs
+        if (songs.isNotEmpty() && songs.all { downloadStates.value[it.id.value] == DownloadState.COMPLETED }) {
+            downloadRepository.removeAll(songs.map { it.id.value })
+        } else {
+            downloadRepository.downloadAll(songs)
+        }
+    }
+
     private fun reloadSongs() {
         val id = _playlistId.value ?: return
         uiState = uiState.copy(isLoading = true, error = null)
@@ -144,6 +174,9 @@ fun PlaylistDetailScreen(
     LaunchedEffect(playlistId) { viewModel.load(playlistId) }
     val state = viewModel.uiState
     val playlist by viewModel.playlist.collectAsStateWithLifecycle()
+    val downloadStates by viewModel.downloadStates.collectAsStateWithLifecycle()
+    val allDownloaded = state.songs.isNotEmpty() &&
+        state.songs.all { downloadStates[it.id.value] == DownloadState.COMPLETED }
     var showMenu by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -194,6 +227,8 @@ fun PlaylistDetailScreen(
                         name = playlist?.name.orEmpty(),
                         songCount = playlist?.songCount ?: state.songs.size,
                         onPlay = { viewModel.play(0) },
+                        allDownloaded = allDownloaded,
+                        onDownloadAllOrRemoveAll = viewModel::downloadAllOrRemoveAll,
                     )
                 }
                 when {
@@ -230,13 +265,31 @@ fun PlaylistDetailScreen(
                                 MaterialTheme.colorScheme.onSurface
                             },
                             trailing = {
-                                val entryId = song.playlistItemId
-                                if (entryId != null) {
-                                    IconButton(onClick = { viewModel.removeSong(entryId) }) {
+                                val downloadState = downloadStates[song.id.value] ?: DownloadState.NONE
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    DownloadStateIndicator(downloadState)
+                                    IconButton(onClick = { viewModel.toggleDownload(song) }) {
                                         Icon(
-                                            Icons.Filled.RemoveCircleOutline,
-                                            contentDescription = "Remove from playlist",
+                                            if (downloadState == DownloadState.COMPLETED) {
+                                                Icons.Filled.DownloadDone
+                                            } else {
+                                                Icons.Filled.Download
+                                            },
+                                            contentDescription = if (downloadState == DownloadState.COMPLETED) {
+                                                "Remove download"
+                                            } else {
+                                                "Download"
+                                            },
                                         )
+                                    }
+                                    val entryId = song.playlistItemId
+                                    if (entryId != null) {
+                                        IconButton(onClick = { viewModel.removeSong(entryId) }) {
+                                            Icon(
+                                                Icons.Filled.RemoveCircleOutline,
+                                                contentDescription = "Remove from playlist",
+                                            )
+                                        }
                                     }
                                 }
                             },
@@ -301,7 +354,13 @@ private fun RenamePlaylistDialog(initialName: String, onDismiss: () -> Unit, onR
 }
 
 @Composable
-private fun PlaylistDetailHeader(name: String, songCount: Int, onPlay: () -> Unit) {
+private fun PlaylistDetailHeader(
+    name: String,
+    songCount: Int,
+    onPlay: () -> Unit,
+    allDownloaded: Boolean,
+    onDownloadAllOrRemoveAll: () -> Unit,
+) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -313,16 +372,32 @@ private fun PlaylistDetailHeader(name: String, songCount: Int, onPlay: () -> Uni
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.size(16.dp))
-        val playInteraction = remember { MutableInteractionSource() }
-        Button(
-            onClick = onPlay,
-            modifier = Modifier.pressScale(playInteraction, pressedScale = 0.92f),
-            shape = MaterialTheme.shapes.large,
-            interactionSource = playInteraction,
-        ) {
-            Icon(Icons.Filled.PlayArrow, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text("Play")
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            val playInteraction = remember { MutableInteractionSource() }
+            Button(
+                onClick = onPlay,
+                modifier = Modifier.pressScale(playInteraction, pressedScale = 0.92f),
+                shape = MaterialTheme.shapes.large,
+                interactionSource = playInteraction,
+            ) {
+                Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Play")
+            }
+            val downloadInteraction = remember { MutableInteractionSource() }
+            OutlinedButton(
+                onClick = onDownloadAllOrRemoveAll,
+                modifier = Modifier.pressScale(downloadInteraction, pressedScale = 0.92f),
+                shape = MaterialTheme.shapes.large,
+                interactionSource = downloadInteraction,
+            ) {
+                Icon(
+                    if (allDownloaded) Icons.Filled.DownloadDone else Icons.Filled.Download,
+                    contentDescription = null,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(if (allDownloaded) "Remove downloads" else "Download all")
+            }
         }
     }
 }

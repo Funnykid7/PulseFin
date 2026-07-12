@@ -16,6 +16,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -24,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -44,9 +47,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.pulsefin.app.ui.components.DownloadStateIndicator
 import com.pulsefin.app.ui.components.bouncyClickable
 import com.pulsefin.app.ui.components.pressScale
 import com.pulsefin.app.ui.components.sharedArtwork
@@ -54,9 +59,15 @@ import com.pulsefin.app.ui.theme.ArtworkTheme
 import com.pulsefin.core.common.util.sizedArtUrl
 import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.common.result.PulseResult
+import com.pulsefin.core.domain.model.DownloadState
 import com.pulsefin.core.domain.model.Song
+import com.pulsefin.core.domain.repository.DownloadRepository
 import com.pulsefin.core.domain.repository.MediaRepository
 import com.pulsefin.core.playback.controller.PlaybackController
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
@@ -69,11 +80,16 @@ data class AlbumDetailUiState(
 class AlbumDetailViewModel(
     private val repository: MediaRepository,
     private val playbackController: PlaybackController,
+    private val downloadRepository: DownloadRepository,
 ) : ViewModel() {
     var uiState by mutableStateOf(AlbumDetailUiState())
         private set
 
     private var loadedId: String? = null
+
+    val downloadStates: StateFlow<Map<String, DownloadState>> = downloadRepository.observeDownloads()
+        .map { downloads -> downloads.mapValues { it.value.state } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     fun load(albumId: String) {
         if (loadedId == albumId) return
@@ -88,6 +104,23 @@ class AlbumDetailViewModel(
     }
 
     fun play(index: Int) = playbackController.play(uiState.tracks, index)
+
+    fun toggleDownload(song: Song) = viewModelScope.launch {
+        if (downloadStates.value[song.id.value] == DownloadState.COMPLETED) {
+            downloadRepository.remove(song.id.value)
+        } else {
+            downloadRepository.download(song)
+        }
+    }
+
+    fun downloadAllOrRemoveAll() = viewModelScope.launch {
+        val tracks = uiState.tracks
+        if (tracks.isNotEmpty() && tracks.all { downloadStates.value[it.id.value] == DownloadState.COMPLETED }) {
+            downloadRepository.removeAll(tracks.map { it.id.value })
+        } else {
+            downloadRepository.downloadAll(tracks)
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -102,10 +135,13 @@ fun AlbumDetailScreen(
 ) {
     LaunchedEffect(albumId) { viewModel.load(albumId) }
     val state = viewModel.uiState
+    val downloadStates by viewModel.downloadStates.collectAsStateWithLifecycle()
     val albumName = state.tracks.firstOrNull()?.albumName?.ifBlank { null } ?: "Album"
     // The nav-arg art renders the hero (and seeds Monet) immediately; tracks refine it later.
     val baseArt = state.tracks.firstOrNull()?.artworkUrl ?: initialArtUrl
     val artUrl = sizedArtUrl(baseArt, 512)
+    val allDownloaded = state.tracks.isNotEmpty() &&
+        state.tracks.all { downloadStates[it.id.value] == DownloadState.COMPLETED }
 
     ArtworkTheme(artUrl) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -140,6 +176,8 @@ fun AlbumDetailScreen(
                             albumName = albumName,
                             artistName = state.tracks.firstOrNull()?.artistName.orEmpty(),
                             onPlay = { viewModel.play(0) },
+                            allDownloaded = allDownloaded,
+                            onDownloadAllOrRemoveAll = viewModel::downloadAllOrRemoveAll,
                         )
                     }
                     when {
@@ -162,7 +200,9 @@ fun AlbumDetailScreen(
                                 index = index + 1,
                                 song = song,
                                 isPlaying = song.id.value == currentMediaId,
+                                downloadState = downloadStates[song.id.value] ?: DownloadState.NONE,
                                 onClick = { viewModel.play(index) },
+                                onToggleDownload = { viewModel.toggleDownload(song) },
                                 modifier = Modifier.animateItem(),
                             )
                         }
@@ -181,6 +221,8 @@ private fun AlbumHeader(
     albumName: String,
     artistName: String,
     onPlay: () -> Unit,
+    allDownloaded: Boolean,
+    onDownloadAllOrRemoveAll: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -206,22 +248,46 @@ private fun AlbumHeader(
         Text(albumName, style = MaterialTheme.typography.headlineSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Text(artistName, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.size(16.dp))
-        val playInteraction = remember { MutableInteractionSource() }
-        Button(
-            onClick = onPlay,
-            modifier = Modifier.pressScale(playInteraction, pressedScale = 0.92f),
-            shape = MaterialTheme.shapes.large,
-            interactionSource = playInteraction,
-        ) {
-            Icon(Icons.Filled.PlayArrow, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text("Play")
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            val playInteraction = remember { MutableInteractionSource() }
+            Button(
+                onClick = onPlay,
+                modifier = Modifier.pressScale(playInteraction, pressedScale = 0.92f),
+                shape = MaterialTheme.shapes.large,
+                interactionSource = playInteraction,
+            ) {
+                Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Play")
+            }
+            val downloadInteraction = remember { MutableInteractionSource() }
+            OutlinedButton(
+                onClick = onDownloadAllOrRemoveAll,
+                modifier = Modifier.pressScale(downloadInteraction, pressedScale = 0.92f),
+                shape = MaterialTheme.shapes.large,
+                interactionSource = downloadInteraction,
+            ) {
+                Icon(
+                    if (allDownloaded) Icons.Filled.DownloadDone else Icons.Filled.Download,
+                    contentDescription = null,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(if (allDownloaded) "Remove downloads" else "Download all")
+            }
         }
     }
 }
 
 @Composable
-private fun TrackRow(index: Int, song: Song, isPlaying: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun TrackRow(
+    index: Int,
+    song: Song,
+    isPlaying: Boolean,
+    downloadState: DownloadState,
+    onClick: () -> Unit,
+    onToggleDownload: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val accent = MaterialTheme.colorScheme.primary
     val titleColor by animateColorAsState(
         if (isPlaying) accent else MaterialTheme.colorScheme.onSurface,
@@ -251,8 +317,15 @@ private fun TrackRow(index: Int, song: Song, isPlaying: Boolean, onClick: () -> 
             color = titleColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.weight(1f),
         )
+        DownloadStateIndicator(downloadState)
+        IconButton(onClick = onToggleDownload) {
+            Icon(
+                if (downloadState == DownloadState.COMPLETED) Icons.Filled.DownloadDone else Icons.Filled.Download,
+                contentDescription = if (downloadState == DownloadState.COMPLETED) "Remove download" else "Download",
+            )
+        }
     }
 }
 
