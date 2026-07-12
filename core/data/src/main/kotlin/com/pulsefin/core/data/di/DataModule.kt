@@ -12,6 +12,7 @@ import com.pulsefin.core.data.local.PlaylistDao
 import com.pulsefin.core.data.local.PulseFinDatabase
 import com.pulsefin.core.data.local.RecentSearchDao
 import com.pulsefin.core.data.local.SessionStore
+import com.pulsefin.core.data.local.SettingsStore
 import com.pulsefin.core.data.local.SongDao
 import com.pulsefin.core.data.repository.AuthRepositoryImpl
 import com.pulsefin.core.data.repository.MediaRepositoryImpl
@@ -42,6 +43,7 @@ val dataModule: Module = module {
     single<DownloadDao> { get<PulseFinDatabase>().downloadDao() }
 
     single { SessionStore(androidContext(), get()) }
+    single { SettingsStore(androidContext(), get()) }
     single { JellyfinApiProvider(get(), get()) }
 
     single<AuthRepository> { AuthRepositoryImpl(get(), get(), get()) }
