@@ -33,7 +33,7 @@ class DownloadRepositoryImpl(
 ) : DownloadRepository {
 
     private val _downloads = MutableStateFlow<Map<String, SongDownload>>(emptyMap())
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     init {
         // Media3's own index survives process death; seed from it so cold-start UI is correct
