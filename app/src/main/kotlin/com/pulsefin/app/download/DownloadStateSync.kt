@@ -26,6 +26,7 @@ class DownloadStateSync(
 
     fun start() {
         scope.launch {
+            var previousSongIds = emptySet<String>()
             downloadRepository.observeDownloads().collect { downloads ->
                 val songsById = mediaRepository.observeSongs().first().associateBy { it.id.value }
                 downloads.forEach { (songId, download) ->
@@ -44,6 +45,10 @@ class DownloadStateSync(
                         ),
                     )
                 }
+                (previousSongIds - downloads.keys).forEach { removedSongId ->
+                    downloadDao.delete(removedSongId)
+                }
+                previousSongIds = downloads.keys
             }
         }
     }
