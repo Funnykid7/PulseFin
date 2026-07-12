@@ -3,6 +3,13 @@
 A native Android music client for [Jellyfin](https://jellyfin.org/) media servers, built with
 Jetpack Compose and Material 3 Expressive.
 
+<p align="center">
+  <img src="docs/images/home.png" width="200" alt="Home screen" />
+  <img src="docs/images/albums.png" width="200" alt="Albums grid" />
+  <img src="docs/images/playlists.png" width="200" alt="Playlists" />
+  <img src="docs/images/settings.png" width="200" alt="Settings screen" />
+</p>
+
 ## Design
 
 PulseFin leans into Material 3's newer "Expressive" design language rather than a stock/default
