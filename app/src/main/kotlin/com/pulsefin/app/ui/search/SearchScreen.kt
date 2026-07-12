@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pulsefin.app.ui.components.DownloadStateIndicator
 import com.pulsefin.app.ui.components.MediaRow
 import com.pulsefin.app.ui.components.SongOverflowMenu
 import com.pulsefin.app.ui.components.bouncyClickable
@@ -45,14 +46,20 @@ import com.pulsefin.app.ui.playlist.AddToPlaylistSheet
 import com.pulsefin.core.common.util.sizedArtUrl
 import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.common.result.PulseResult
+import com.pulsefin.core.domain.model.DownloadState
 import com.pulsefin.core.domain.model.Song
+import com.pulsefin.core.domain.repository.DownloadRepository
 import com.pulsefin.core.domain.repository.MediaRepository
 import com.pulsefin.core.domain.repository.SearchResults
 import com.pulsefin.core.playback.controller.PlaybackController
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
@@ -67,11 +74,16 @@ data class SearchUiState(
 class SearchViewModel(
     private val repository: MediaRepository,
     private val playbackController: PlaybackController,
+    private val downloadRepository: DownloadRepository,
 ) : ViewModel() {
     var uiState by mutableStateOf(SearchUiState())
         private set
 
     val recentSearches = repository.observeRecentSearches(RECENT_SEARCHES_LIMIT)
+
+    val downloadStates: StateFlow<Map<String, DownloadState>> = downloadRepository.observeDownloads()
+        .map { downloads -> downloads.mapValues { it.value.state } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     private val queryFlow = MutableStateFlow("")
 
@@ -106,6 +118,14 @@ class SearchViewModel(
 
     fun addToQueue(song: Song) = playbackController.addToQueue(song)
 
+    fun toggleDownload(song: Song) = viewModelScope.launch {
+        if (downloadStates.value[song.id.value] == DownloadState.COMPLETED) {
+            downloadRepository.remove(song.id.value)
+        } else {
+            downloadRepository.download(song)
+        }
+    }
+
     fun removeRecentSearch(query: String) = viewModelScope.launch { repository.removeRecentSearch(query) }
 
     fun clearRecentSearches() = viewModelScope.launch { repository.clearRecentSearches() }
@@ -122,6 +142,7 @@ fun SearchScreen(
     val state = viewModel.uiState
     val results = state.results
     val recentSearches by viewModel.recentSearches.collectAsStateWithLifecycle(emptyList())
+    val downloadStates by viewModel.downloadStates.collectAsStateWithLifecycle()
     var addToPlaylistSongId by remember { mutableStateOf<String?>(null) }
 
     Column(
@@ -202,10 +223,12 @@ fun SearchScreen(
                 ) { index, song ->
                     SongResultRow(
                         song = song,
+                        downloadState = downloadStates[song.id.value] ?: DownloadState.NONE,
                         onClick = { viewModel.playSong(index) },
                         onPlayNext = { viewModel.playNext(song) },
                         onAddToQueue = { viewModel.addToQueue(song) },
                         onAddToPlaylist = { addToPlaylistSongId = song.id.value },
+                        onToggleDownload = { viewModel.toggleDownload(song) },
                         modifier = Modifier.animateItem(),
                     )
                 }
@@ -305,10 +328,12 @@ private fun RecentSearchRow(
 @Composable
 private fun SongResultRow(
     song: Song,
+    downloadState: DownloadState,
     onClick: () -> Unit,
     onPlayNext: () -> Unit,
     onAddToQueue: () -> Unit,
     onAddToPlaylist: () -> Unit,
+    onToggleDownload: () -> Unit,
     modifier: Modifier = Modifier,
 ) = ResultRow(
     title = song.title,
@@ -318,11 +343,16 @@ private fun SongResultRow(
     onClick = onClick,
     modifier = modifier,
     trailing = {
-        SongOverflowMenu(
-            onPlayNext = onPlayNext,
-            onAddToQueue = onAddToQueue,
-            onAddToPlaylist = onAddToPlaylist,
-        )
+        androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
+            DownloadStateIndicator(downloadState)
+            SongOverflowMenu(
+                downloadState = downloadState,
+                onPlayNext = onPlayNext,
+                onAddToQueue = onAddToQueue,
+                onAddToPlaylist = onAddToPlaylist,
+                onToggleDownload = onToggleDownload,
+            )
+        }
     },
 )
 

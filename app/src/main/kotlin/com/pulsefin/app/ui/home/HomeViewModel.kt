@@ -5,21 +5,29 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pulsefin.core.domain.model.DownloadState
 import com.pulsefin.core.domain.model.Song
+import com.pulsefin.core.domain.repository.DownloadRepository
 import com.pulsefin.core.domain.repository.MediaRepository
 import com.pulsefin.core.playback.controller.PlaybackController
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class HomeViewModel(
     private val repository: MediaRepository,
     private val playbackController: PlaybackController,
+    private val downloadRepository: DownloadRepository,
 ) : ViewModel() {
 
     val songs: StateFlow<List<Song>> = repository.observeSongs()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val downloadStates: StateFlow<Map<String, DownloadState>> = downloadRepository.observeDownloads()
+        .map { downloads -> downloads.mapValues { it.value.state } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     var isRefreshing by mutableStateOf(false)
         private set
@@ -42,4 +50,12 @@ class HomeViewModel(
     fun playNext(song: Song) = playbackController.playNext(song)
 
     fun addToQueue(song: Song) = playbackController.addToQueue(song)
+
+    fun toggleDownload(song: Song) = viewModelScope.launch {
+        if (downloadStates.value[song.id.value] == DownloadState.COMPLETED) {
+            downloadRepository.remove(song.id.value)
+        } else {
+            downloadRepository.download(song)
+        }
+    }
 }

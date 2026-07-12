@@ -9,6 +9,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -32,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pulsefin.app.ui.components.DownloadStateIndicator
 import com.pulsefin.app.ui.components.MediaRow
 import com.pulsefin.app.ui.components.RefreshBox
 import com.pulsefin.app.ui.components.SongOverflowMenu
@@ -39,6 +41,7 @@ import com.pulsefin.app.ui.components.bouncyClickable
 import com.pulsefin.app.ui.components.pressScale
 import com.pulsefin.app.ui.playlist.AddToPlaylistSheet
 import com.pulsefin.core.common.util.sizedArtUrl
+import com.pulsefin.core.domain.model.DownloadState
 import com.pulsefin.core.domain.model.Song
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -55,6 +58,7 @@ fun HomeScreen(
     viewModel: HomeViewModel = koinViewModel(),
 ) {
     val songs by viewModel.songs.collectAsStateWithLifecycle()
+    val downloadStates by viewModel.downloadStates.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var addToPlaylistSongId by remember { mutableStateOf<String?>(null) }
@@ -88,10 +92,12 @@ fun HomeScreen(
                     SongRow(
                         song = song,
                         isPlaying = song.id.value == currentMediaId,
+                        downloadState = downloadStates[song.id.value] ?: DownloadState.NONE,
                         onClick = { viewModel.onSongClick(index) },
                         onPlayNext = { viewModel.playNext(song) },
                         onAddToQueue = { viewModel.addToQueue(song) },
                         onAddToPlaylist = { addToPlaylistSongId = song.id.value },
+                        onToggleDownload = { viewModel.toggleDownload(song) },
                         modifier = Modifier.animateItem(),
                     )
                 }
@@ -131,10 +137,12 @@ fun HomeScreen(
 private fun SongRow(
     song: Song,
     isPlaying: Boolean,
+    downloadState: DownloadState,
     onClick: () -> Unit,
     onPlayNext: () -> Unit,
     onAddToQueue: () -> Unit,
     onAddToPlaylist: () -> Unit,
+    onToggleDownload: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val accent = MaterialTheme.colorScheme.primary
@@ -156,11 +164,16 @@ private fun SongRow(
         trailingText = formatDuration(song.durationMs),
         trailingColor = trailingColor,
         trailing = {
-            SongOverflowMenu(
-                onPlayNext = onPlayNext,
-                onAddToQueue = onAddToQueue,
-                onAddToPlaylist = onAddToPlaylist,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                DownloadStateIndicator(downloadState)
+                SongOverflowMenu(
+                    downloadState = downloadState,
+                    onPlayNext = onPlayNext,
+                    onAddToQueue = onAddToQueue,
+                    onAddToPlaylist = onAddToPlaylist,
+                    onToggleDownload = onToggleDownload,
+                )
+            }
         },
     )
 }
