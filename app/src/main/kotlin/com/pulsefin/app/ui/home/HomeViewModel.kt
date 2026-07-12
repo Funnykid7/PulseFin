@@ -45,11 +45,11 @@ class HomeViewModel(
         }
     }
 
-    fun onSongClick(index: Int) = playbackController.play(songs.value, index)
+    fun onSongClick(index: Int) = viewModelScope.launch { playbackController.play(songs.value, index) }
 
-    fun playNext(song: Song) = playbackController.playNext(song)
+    fun playNext(song: Song) = viewModelScope.launch { playbackController.playNext(song) }
 
-    fun addToQueue(song: Song) = playbackController.addToQueue(song)
+    fun addToQueue(song: Song) = viewModelScope.launch { playbackController.addToQueue(song) }
 
     fun toggleDownload(song: Song) = viewModelScope.launch {
         if (downloadStates.value[song.id.value] == DownloadState.COMPLETED) {

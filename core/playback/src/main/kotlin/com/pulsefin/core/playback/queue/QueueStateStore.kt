@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import com.pulsefin.core.domain.repository.StreamUrlResolver
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
 import org.json.JSONObject
@@ -21,7 +22,6 @@ data class PersistedQueueItem(
     val artist: String,
     val album: String,
     val artworkUrl: String?,
-    val streamUrl: String,
 )
 
 data class PersistedQueueState(
@@ -30,9 +30,15 @@ data class PersistedQueueState(
     val positionMs: Long,
 )
 
-fun PersistedQueueItem.toMediaItem(): MediaItem =
-    MediaItem.Builder()
-        .setUri(streamUrl)
+/**
+ * Resolves a fresh, authenticated stream URL rather than persisting one — the access token is
+ * never written to disk as part of the queue state. Returns null (skip this item on restore) if
+ * resolution fails, e.g. the session is gone.
+ */
+suspend fun PersistedQueueItem.toMediaItem(resolver: StreamUrlResolver): MediaItem? {
+    val uri = resolver.resolveStreamUrl(mediaId) ?: return null
+    return MediaItem.Builder()
+        .setUri(uri)
         .setMediaId(mediaId)
         .setMediaMetadata(
             MediaMetadata.Builder()
@@ -43,11 +49,14 @@ fun PersistedQueueItem.toMediaItem(): MediaItem =
                 .build(),
         )
         .build()
+}
 
 /**
  * Persists just enough of the live queue (not the full [com.pulsefin.core.domain.model.Song],
  * to avoid a `:core:playback` -> `:core:data` dependency) to rebuild it on
- * [com.pulsefin.core.playback.service.PlaybackService.onCreate] after process death.
+ * [com.pulsefin.core.playback.service.PlaybackService.onCreate] after process death. Deliberately
+ * excludes the stream URL — that's resolved fresh via [StreamUrlResolver] on restore, so the
+ * access token is never written to this (or any) on-disk store.
  */
 class QueueStateStore(private val context: Context) {
 
@@ -67,8 +76,7 @@ class QueueStateStore(private val context: Context) {
                         .put("title", item.title)
                         .put("artist", item.artist)
                         .put("album", item.album)
-                        .put("art", item.artworkUrl.orEmpty())
-                        .put("stream", item.streamUrl),
+                        .put("art", item.artworkUrl.orEmpty()),
                 )
             }
             prefs[Keys.ITEMS] = array.toString()
@@ -89,7 +97,6 @@ class QueueStateStore(private val context: Context) {
                 artist = obj.optString("artist"),
                 album = obj.optString("album"),
                 artworkUrl = obj.optString("art").ifBlank { null },
-                streamUrl = obj.optString("stream"),
             )
         }
         if (items.isEmpty()) return null

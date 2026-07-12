@@ -102,10 +102,10 @@ class YourMixViewModel(
 
     fun onShufflePlay() {
         val all = songs.value
-        if (all.isNotEmpty()) playbackController.play(all.shuffled(), 0)
+        if (all.isNotEmpty()) viewModelScope.launch { playbackController.play(all.shuffled(), 0) }
     }
 
-    fun onFavoriteClick(index: Int) = playbackController.play(favoriteSongs.value, index)
+    fun onFavoriteClick(index: Int) = viewModelScope.launch { playbackController.play(favoriteSongs.value, index) }
 }
 
 /**

@@ -29,8 +29,6 @@ data class Song(
     val artistName: String,
     val durationMs: Long,
     val artworkUrl: String? = null,
-    /** Direct-play stream URL resolved from the Jellyfin server. */
-    val streamUrl: String? = null,
     val isFavorite: Boolean = false,
     /**
      * The playlist-entry ID for this song, only populated when it came from

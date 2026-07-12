@@ -3,7 +3,6 @@ package com.pulsefin.core.data.repository
 import com.pulsefin.core.common.dispatchers.AppDispatchers
 import com.pulsefin.core.common.result.PulseResult
 import com.pulsefin.core.data.jellyfin.JellyfinApiProvider
-import com.pulsefin.core.data.jellyfin.ensureApiKey
 import com.pulsefin.core.data.local.AlbumDao
 import com.pulsefin.core.data.local.AlbumEntity
 import com.pulsefin.core.data.local.ArtistDao
@@ -449,7 +448,6 @@ private fun BaseItemDto.toSong(api: ApiClient): Song = Song(
     artistName = artists?.joinToString(", ")?.ifBlank { null } ?: albumArtist ?: "Unknown artist",
     durationMs = (runTimeTicks ?: 0L) / 10_000,
     artworkUrl = artworkUrl(api),
-    streamUrl = ensureApiKey(api.audioApi.getAudioStreamUrl(itemId = id, static = true), api.accessToken),
     isFavorite = userData?.isFavorite ?: false,
 )
 
@@ -496,13 +494,13 @@ private fun BaseItemDto.artworkUrl(api: ApiClient): String? = runCatching {
 
 // --- domain <-> Room entity ---
 
-private fun Song.toEntity() = SongEntity(id.value, title, albumName, artistName, durationMs, artworkUrl, streamUrl, isFavorite)
+private fun Song.toEntity() = SongEntity(id.value, title, albumName, artistName, durationMs, artworkUrl, isFavorite)
 private fun Album.toEntity() = AlbumEntity(id.value, name, artistName, artworkUrl, year)
 private fun Artist.toEntity() = ArtistEntity(id.value, name, artworkUrl)
 private fun Playlist.toEntity() =
     PlaylistEntity(id.value, name, artworkUrl, songCount, memberArtworkUrls.joinToString("|"))
 
-private fun SongEntity.toSong() = Song(MediaId(id), title, albumName, artistName, durationMs, artworkUrl, streamUrl, isFavorite)
+private fun SongEntity.toSong() = Song(MediaId(id), title, albumName, artistName, durationMs, artworkUrl, isFavorite)
 private fun AlbumEntity.toAlbum() = Album(MediaId(id), name, artistName, artworkUrl, year)
 private fun ArtistEntity.toArtist() = Artist(MediaId(id), name, artworkUrl)
 private fun PlaylistEntity.toPlaylist() = Playlist(

@@ -26,7 +26,6 @@ data class SongEntity(
     val artistName: String,
     val durationMs: Long,
     val artworkUrl: String?,
-    val streamUrl: String?,
     val isFavorite: Boolean = false,
 )
 
@@ -194,7 +193,7 @@ interface DownloadDao {
         SongEntity::class, AlbumEntity::class, ArtistEntity::class, RecentSearchEntity::class,
         PlaylistEntity::class, DownloadEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = false,
 )
 abstract class PulseFinDatabase : RoomDatabase() {

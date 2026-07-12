@@ -9,6 +9,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import com.pulsefin.core.domain.repository.StreamUrlResolver
 import com.pulsefin.core.playback.R
 import com.pulsefin.core.playback.queue.QueueStateStore
 import com.pulsefin.core.playback.queue.toMediaItem
@@ -28,6 +29,7 @@ class PlaybackService : MediaSessionService() {
 
     private val queueStateStore: QueueStateStore by inject()
     private val cacheDataSourceFactory: CacheDataSource.Factory by inject()
+    private val streamUrlResolver: StreamUrlResolver by inject()
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private var mediaSession: MediaSession? = null
@@ -58,9 +60,13 @@ class PlaybackService : MediaSessionService() {
         // has something to resume — prepared but not auto-played.
         serviceScope.launch {
             val restored = queueStateStore.load() ?: return@launch
-            val items = restored.items.map { it.toMediaItem() }
+            // Capture by mediaId before resolving: a failed resolution can drop an item, which
+            // would otherwise shift restored.currentIndex onto the wrong song.
+            val currentMediaId = restored.items.getOrNull(restored.currentIndex)?.mediaId
+            val items = restored.items.mapNotNull { it.toMediaItem(streamUrlResolver) }
             if (items.isEmpty()) return@launch
-            player.setMediaItems(items, restored.currentIndex.coerceIn(0, items.lastIndex), restored.positionMs)
+            val startIndex = items.indexOfFirst { it.mediaId == currentMediaId }.takeIf { it >= 0 } ?: 0
+            player.setMediaItems(items, startIndex, restored.positionMs)
             player.prepare()
         }
     }

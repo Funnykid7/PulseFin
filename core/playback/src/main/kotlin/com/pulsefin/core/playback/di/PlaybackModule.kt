@@ -27,7 +27,7 @@ import java.util.concurrent.Executors
  */
 val playbackModule: Module = module {
     single { QueueStateStore(androidContext()) }
-    single { PlaybackController(androidContext(), get()) }
+    single { PlaybackController(androidContext(), get(), get<StreamUrlResolver>()) }
 
     single<DatabaseProvider> { StandaloneDatabaseProvider(androidContext()) }
     single {

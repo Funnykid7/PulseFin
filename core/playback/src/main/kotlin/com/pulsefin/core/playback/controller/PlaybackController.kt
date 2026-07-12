@@ -14,6 +14,7 @@ import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import com.pulsefin.core.common.util.sizedArtUrl
 import com.pulsefin.core.domain.model.Song
+import com.pulsefin.core.domain.repository.StreamUrlResolver
 import com.pulsefin.core.playback.queue.PersistedQueueItem
 import com.pulsefin.core.playback.queue.PersistedQueueState
 import com.pulsefin.core.playback.queue.QueueStateStore
@@ -88,7 +89,11 @@ data class QueueItem(
  * lazily-connected controller and exposes playback as a [StateFlow]. All controller calls
  * happen on the main thread (Media3 requirement).
  */
-class PlaybackController(private val context: Context, private val queueStateStore: QueueStateStore) {
+class PlaybackController(
+    private val context: Context,
+    private val queueStateStore: QueueStateStore,
+    private val streamUrlResolver: StreamUrlResolver,
+) {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -176,9 +181,9 @@ class PlaybackController(private val context: Context, private val queueStateSto
         }
     }
 
-    fun play(songs: List<Song>, startIndex: Int) {
+    suspend fun play(songs: List<Song>, startIndex: Int) {
         if (songs.isEmpty()) return
-        val items = songs.mapNotNull { it.toMediaItem() }
+        val items = songs.mapNotNull { it.toMediaItem(streamUrlResolver) }
         if (items.isEmpty()) return
         withController { controller ->
             controller.setMediaItems(items, startIndex.coerceIn(0, items.lastIndex), 0L)
@@ -272,8 +277,8 @@ class PlaybackController(private val context: Context, private val queueStateSto
      * Makes [song] play right after the current item, without disturbing playback. If it's
      * already somewhere in the queue, moves that existing entry instead of inserting a duplicate.
      */
-    fun playNext(song: Song) {
-        val item = song.toMediaItem() ?: return
+    suspend fun playNext(song: Song) {
+        val item = song.toMediaItem(streamUrlResolver) ?: return
         withController { controller ->
             val insertAt = (controller.currentMediaItemIndex + 1).coerceIn(0, controller.mediaItemCount)
             val existingIndex = (0 until controller.mediaItemCount)
@@ -291,8 +296,8 @@ class PlaybackController(private val context: Context, private val queueStateSto
     }
 
     /** Appends [song] to the end of the queue. */
-    fun addToQueue(song: Song) {
-        val item = song.toMediaItem() ?: return
+    suspend fun addToQueue(song: Song) {
+        val item = song.toMediaItem(streamUrlResolver) ?: return
         withController { it.addMediaItem(item) }
     }
 
@@ -322,9 +327,8 @@ class PlaybackController(private val context: Context, private val queueStateSto
     // position tick — so this is cheap enough to call unconditionally from updateQueue().
     private fun persistQueueState(player: Player) {
         if (player.mediaItemCount == 0) return
-        val items = (0 until player.mediaItemCount).mapNotNull { i ->
+        val items = (0 until player.mediaItemCount).map { i ->
             val item = player.getMediaItemAt(i)
-            val uri = item.localConfiguration?.uri?.toString() ?: return@mapNotNull null
             val md = item.mediaMetadata
             PersistedQueueItem(
                 mediaId = item.mediaId,
@@ -332,7 +336,6 @@ class PlaybackController(private val context: Context, private val queueStateSto
                 artist = md.artist?.toString().orEmpty(),
                 album = md.albumTitle?.toString().orEmpty(),
                 artworkUrl = md.artworkUri?.toString(),
-                streamUrl = uri,
             )
         }
         if (items.isEmpty()) return
@@ -364,8 +367,8 @@ class PlaybackController(private val context: Context, private val queueStateSto
     }
 }
 
-private fun Song.toMediaItem(): MediaItem? {
-    val uri = streamUrl ?: return null
+private suspend fun Song.toMediaItem(resolver: StreamUrlResolver): MediaItem? {
+    val uri = resolver.resolveStreamUrl(id.value) ?: return null
     return MediaItem.Builder()
         .setUri(uri)
         .setMediaId(id.value)

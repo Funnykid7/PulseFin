@@ -103,7 +103,7 @@ class AlbumDetailViewModel(
         }
     }
 
-    fun play(index: Int) = playbackController.play(uiState.tracks, index)
+    fun play(index: Int) = viewModelScope.launch { playbackController.play(uiState.tracks, index) }
 
     fun toggleDownload(song: Song) = viewModelScope.launch {
         if (downloadStates.value[song.id.value] == DownloadState.COMPLETED) {

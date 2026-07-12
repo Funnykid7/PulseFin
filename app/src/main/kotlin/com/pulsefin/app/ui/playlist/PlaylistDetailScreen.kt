@@ -107,7 +107,7 @@ class PlaylistDetailViewModel(
         reloadSongs()
     }
 
-    fun play(index: Int) = playbackController.play(uiState.songs, index)
+    fun play(index: Int) = viewModelScope.launch { playbackController.play(uiState.songs, index) }
 
     fun removeSong(entryId: String) {
         val id = _playlistId.value ?: return
