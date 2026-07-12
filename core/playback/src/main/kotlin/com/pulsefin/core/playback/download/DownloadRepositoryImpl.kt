@@ -11,6 +11,7 @@ import com.pulsefin.core.domain.model.Song
 import com.pulsefin.core.domain.model.SongDownload
 import com.pulsefin.core.domain.repository.DownloadRepository
 import com.pulsefin.core.domain.repository.StreamUrlResolver
+import java.io.IOException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,10 +31,16 @@ class DownloadRepositoryImpl(
         // Media3's own index survives process death; seed from it so cold-start UI is correct
         // even before any DownloadManager.Listener callback fires. Use downloadIndex.getDownloads()
         // (not currentDownloads, which excludes COMPLETED/FAILED) so terminal states are seeded too.
-        downloadManager.downloadIndex.getDownloads().use { cursor ->
-            while (cursor.moveToNext()) {
-                updateFrom(cursor.download)
+        // getDownloads() declares throws IOException; if the index is unreadable, fall back to the
+        // empty default and let DownloadManager.Listener populate state as downloads progress.
+        try {
+            downloadManager.downloadIndex.getDownloads().use { cursor ->
+                while (cursor.moveToNext()) {
+                    updateFrom(cursor.download)
+                }
             }
+        } catch (e: IOException) {
+            // Ignore; _downloads stays empty and will be populated by the listener below.
         }
         downloadManager.addListener(object : DownloadManager.Listener {
             override fun onDownloadChanged(dm: DownloadManager, download: Download, finalException: Exception?) {
