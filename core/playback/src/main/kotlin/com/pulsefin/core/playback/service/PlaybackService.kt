@@ -74,6 +74,12 @@ class PlaybackService : MediaSessionService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =
         mediaSession
 
+    // Media3's default onTaskRemoved() keeps the service alive if playback is active when the
+    // task is swiped away. We want playback to always stop with the app, so force it here.
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        pauseAllPlayersAndStopSelf()
+    }
+
     override fun onDestroy() {
         mediaSession?.run {
             player.release()
