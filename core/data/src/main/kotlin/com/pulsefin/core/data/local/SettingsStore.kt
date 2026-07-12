@@ -39,15 +39,15 @@ class SettingsStore(context: Context, private val dispatchers: AppDispatchers) {
         )
     }
 
-    suspend fun setDarkTheme(enabled: Boolean) = withContext(dispatchers.io) {
+    suspend fun setDarkTheme(enabled: Boolean): Unit = withContext(dispatchers.io) {
         dataStore.edit { it[Keys.DARK_THEME] = enabled }
     }
 
-    suspend fun setDynamicColor(enabled: Boolean) = withContext(dispatchers.io) {
+    suspend fun setDynamicColor(enabled: Boolean): Unit = withContext(dispatchers.io) {
         dataStore.edit { it[Keys.DYNAMIC_COLOR] = enabled }
     }
 
-    suspend fun setPreferDownloadsOnCellular(enabled: Boolean) = withContext(dispatchers.io) {
+    suspend fun setPreferDownloadsOnCellular(enabled: Boolean): Unit = withContext(dispatchers.io) {
         dataStore.edit { it[Keys.PREFER_DOWNLOADS_ON_CELLULAR] = enabled }
     }
 }

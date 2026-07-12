@@ -12,6 +12,7 @@ import com.pulsefin.app.ui.login.LoginViewModel
 import com.pulsefin.app.ui.playlist.PlaylistDetailViewModel
 import com.pulsefin.app.ui.playlist.PlaylistsViewModel
 import com.pulsefin.app.ui.search.SearchViewModel
+import com.pulsefin.app.ui.settings.SettingsViewModel
 import org.koin.androidx.viewmodel.dsl.viewModelOf
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -33,4 +34,5 @@ val appModule: Module = module {
     viewModelOf(::SearchViewModel)
     viewModelOf(::PlaylistsViewModel)
     viewModelOf(::PlaylistDetailViewModel)
+    viewModelOf(::SettingsViewModel)
 }
