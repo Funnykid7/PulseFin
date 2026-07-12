@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Lyrics
@@ -32,6 +34,7 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
@@ -72,6 +75,8 @@ import com.pulsefin.app.ui.theme.ArtworkTheme
 import com.pulsefin.core.designsystem.theme.RoundedHeroShape
 import com.pulsefin.core.designsystem.theme.SquircleShape
 import com.pulsefin.core.designsystem.theme.cookieShape
+import com.pulsefin.core.domain.model.DownloadState
+import com.pulsefin.core.domain.repository.DownloadRepository
 import com.pulsefin.core.domain.repository.MediaRepository
 import com.pulsefin.core.playback.controller.PlaybackController
 import com.pulsefin.core.playback.controller.PlaybackError
@@ -86,6 +91,7 @@ fun NowPlayingScreen(
     onOpenLyrics: () -> Unit,
     playbackController: PlaybackController = koinInject(),
     repository: MediaRepository = koinInject(),
+    downloadRepository: DownloadRepository = koinInject(),
 ) {
     val state by playbackController.state.collectAsStateWithLifecycle()
     val positionMs by playbackController.positionMs.collectAsStateWithLifecycle()
@@ -94,8 +100,13 @@ fun NowPlayingScreen(
     // the Room query each time and causing enough jank to drop taps on the transport buttons.
     val favoriteIdsFlow = remember(repository) { repository.observeFavoriteIds() }
     val favoriteIds by favoriteIdsFlow.collectAsStateWithLifecycle(emptySet())
+    val songsFlow = remember(repository) { repository.observeSongs() }
+    val songs by songsFlow.collectAsStateWithLifecycle(emptyList())
+    val downloadStatesFlow = remember(downloadRepository) { downloadRepository.observeDownloads() }
+    val downloadStates by downloadStatesFlow.collectAsStateWithLifecycle(emptyMap())
     val scope = rememberCoroutineScope()
     val isFavorite = state.currentMediaId?.let { it in favoriteIds } ?: false
+    val downloadState = downloadStates[state.currentMediaId]?.state ?: DownloadState.NONE
 
     // Re-theme the whole screen to the current track's album art (per-screen Monet). The scheme is
     // hoisted in the nav host and shared with the mini-player, so it's already present when we open
@@ -110,6 +121,17 @@ fun NowPlayingScreen(
                     val id = state.currentMediaId ?: return@NowPlayingContent
                     val target = !isFavorite
                     scope.launch { repository.setFavorite(id, target) }
+                },
+                downloadState = downloadState,
+                onToggleDownload = {
+                    val id = state.currentMediaId ?: return@NowPlayingContent
+                    scope.launch {
+                        if (downloadState == DownloadState.COMPLETED) {
+                            downloadRepository.remove(id)
+                        } else {
+                            songs.find { it.id.value == id }?.let { downloadRepository.download(it) }
+                        }
+                    }
                 },
                 onCollapse = onCollapse,
                 onOpenQueue = onOpenQueue,
@@ -127,6 +149,8 @@ private fun NowPlayingContent(
     positionMs: Long,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
+    downloadState: DownloadState,
+    onToggleDownload: () -> Unit,
     onCollapse: () -> Unit,
     onOpenQueue: () -> Unit,
     onOpenLyrics: () -> Unit,
@@ -311,12 +335,21 @@ private fun NowPlayingContent(
             if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             label = "favoriteTint",
         )
+        val downloadTint by animateColorAsState(
+            if (downloadState == DownloadState.COMPLETED) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            label = "downloadTint",
+        )
         val shuffleInteraction = remember { MutableInteractionSource() }
         val prevInteraction = remember { MutableInteractionSource() }
         val playInteraction = remember { MutableInteractionSource() }
         val nextInteraction = remember { MutableInteractionSource() }
         val repeatInteraction = remember { MutableInteractionSource() }
         val favoriteInteraction = remember { MutableInteractionSource() }
+        val downloadInteraction = remember { MutableInteractionSource() }
 
         // Transport: prev/next are tonal squircles flanking the scalloped cookie play button.
         Row(
@@ -413,6 +446,27 @@ private fun NowPlayingContent(
                         contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
                         tint = favoriteTint,
                     )
+                }
+                IconButton(
+                    onClick = onToggleDownload,
+                    enabled = state.hasItem &&
+                        downloadState != DownloadState.DOWNLOADING &&
+                        downloadState != DownloadState.QUEUED,
+                    modifier = Modifier.pressScale(downloadInteraction),
+                    interactionSource = downloadInteraction,
+                ) {
+                    when (downloadState) {
+                        DownloadState.DOWNLOADING, DownloadState.QUEUED ->
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        DownloadState.COMPLETED ->
+                            Icon(
+                                Icons.Filled.DownloadDone,
+                                contentDescription = "Remove download",
+                                tint = downloadTint,
+                            )
+                        else ->
+                            Icon(Icons.Filled.Download, contentDescription = "Download", tint = downloadTint)
+                    }
                 }
             }
         }
