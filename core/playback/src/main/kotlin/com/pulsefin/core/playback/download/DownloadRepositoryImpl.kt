@@ -28,8 +28,13 @@ class DownloadRepositoryImpl(
 
     init {
         // Media3's own index survives process death; seed from it so cold-start UI is correct
-        // even before any DownloadManager.Listener callback fires.
-        downloadManager.currentDownloads.forEach { updateFrom(it) }
+        // even before any DownloadManager.Listener callback fires. Use downloadIndex.getDownloads()
+        // (not currentDownloads, which excludes COMPLETED/FAILED) so terminal states are seeded too.
+        downloadManager.downloadIndex.getDownloads().use { cursor ->
+            while (cursor.moveToNext()) {
+                updateFrom(cursor.download)
+            }
+        }
         downloadManager.addListener(object : DownloadManager.Listener {
             override fun onDownloadChanged(dm: DownloadManager, download: Download, finalException: Exception?) {
                 updateFrom(download)
