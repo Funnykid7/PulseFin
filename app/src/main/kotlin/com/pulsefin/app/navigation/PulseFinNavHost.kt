@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
@@ -28,10 +27,11 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -82,10 +82,10 @@ import com.pulsefin.app.ui.player.QueueScreen
 import com.pulsefin.app.ui.playlist.PlaylistDetailScreen
 import com.pulsefin.app.ui.playlist.PlaylistsScreen
 import com.pulsefin.app.ui.search.SearchScreen
+import com.pulsefin.app.ui.settings.SettingsScreen
 import com.pulsefin.app.ui.theme.ArtworkTheme
 import com.pulsefin.app.ui.theme.LocalArtworkColorScheme
 import com.pulsefin.app.ui.theme.rememberArtworkColorScheme
-import com.pulsefin.core.domain.repository.AuthRepository
 import com.pulsefin.core.domain.repository.MediaRepository
 import com.pulsefin.core.playback.controller.PlaybackController
 import kotlinx.coroutines.launch
@@ -104,6 +104,7 @@ object Routes {
     const val QUEUE = "queue"
     const val LYRICS = "lyrics"
     const val SEARCH = "search"
+    const val SETTINGS = "settings"
 
     // The art URL rides along so the detail hero (and its shared-element morph + Monet theme)
     // can render immediately instead of waiting for the track list to load from the server.
@@ -126,7 +127,6 @@ private val tabs = listOf(
 @Composable
 fun PulseFinNavHost(modifier: Modifier = Modifier) {
     val navController = rememberNavController()
-    val authRepository = koinInject<AuthRepository>()
     val playbackController = koinInject<PlaybackController>()
     val mediaRepository = koinInject<MediaRepository>()
     val scope = rememberCoroutineScope()
@@ -192,14 +192,13 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                             Icon(Icons.Filled.Search, contentDescription = "Search")
                         }
                         Spacer(Modifier.width(8.dp))
-                        val signOutInteraction = remember { MutableInteractionSource() }
-                        FilledTonalButton(
-                            onClick = { scope.launch { authRepository.logout() } },
-                            modifier = Modifier.pressScale(signOutInteraction, pressedScale = 0.92f),
-                            shape = CircleShape,
-                            interactionSource = signOutInteraction,
+                        val settingsInteraction = remember { MutableInteractionSource() }
+                        IconButton(
+                            onClick = { navController.navigate(Routes.SETTINGS) },
+                            modifier = Modifier.pressScale(settingsInteraction, pressedScale = 0.92f),
+                            interactionSource = settingsInteraction,
                         ) {
-                            Text("Sign out")
+                            Icon(Icons.Filled.Settings, contentDescription = "Settings")
                         }
                         Spacer(Modifier.width(8.dp))
                     },
@@ -379,6 +378,16 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                             onBack = { navController.popBackStack() },
                             onAlbumClick = { id, art -> navController.navigate(Routes.albumDetail(id, art)) },
                             onArtistClick = { navController.navigate(Routes.artistDetail(it)) },
+                        )
+                    }
+                    composable(
+                        Routes.SETTINGS,
+                        enterTransition = { slideInHorizontally { it / 3 } + fadeIn() },
+                        popExitTransition = { slideOutHorizontally { it / 3 } + fadeOut() },
+                    ) {
+                        SettingsScreen(
+                            contentPadding = innerPadding,
+                            onBack = { navController.popBackStack() },
                         )
                     }
                 }
