@@ -14,9 +14,6 @@ jobs:
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
-        with:
-          # Full history + tags, so the annotated tag message can be read below.
-          fetch-depth: 0
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -43,9 +40,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
         run: |
-          notes="$(git tag -l --format='%(contents)' "$TAG_NAME")"
-          if [ -z "$notes" ]; then
+          # Query the tag object via the API rather than the local checkout — actions/checkout
+          # can materialize a pushed annotated tag as a lightweight ref pointing at its commit,
+          # which silently loses the annotation message (confirmed on the v0.1.0 release).
+          tag_object_type="$(gh api "repos/$REPO/git/refs/tags/$TAG_NAME" --jq '.object.type')"
+          if [ "$tag_object_type" = "tag" ]; then
+            tag_sha="$(gh api "repos/$REPO/git/refs/tags/$TAG_NAME" --jq '.object.sha')"
+            notes="$(gh api "repos/$REPO/git/tags/$tag_sha" --jq '.message')"
+          else
             notes="Release $TAG_NAME"
           fi
           gh release create "$TAG_NAME" PulseFin.apk \
