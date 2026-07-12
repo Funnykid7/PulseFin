@@ -51,6 +51,12 @@ android {
         release {
             // Real signing when keystore.properties/env vars are set (see docs/RELEASE_SIGNING.md);
             // otherwise debug-signed so the optimized build still installs on local test devices.
+            if (releaseStoreFile == null) {
+                logger.warn(
+                    "⚠️ No release keystore configured — assembleRelease will be signed " +
+                        "with the DEBUG key, not suitable for distribution. See docs/RELEASE_SIGNING.md."
+                )
+            }
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             isMinifyEnabled = true
             isShrinkResources = true
