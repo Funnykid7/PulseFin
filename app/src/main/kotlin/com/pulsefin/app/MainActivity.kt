@@ -15,11 +15,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulsefin.app.ui.root.PulseFinRoot
+import com.pulsefin.core.data.local.Settings
+import com.pulsefin.core.data.local.SettingsStore
 import com.pulsefin.core.designsystem.theme.PulseFinTheme
 import com.pulsefin.core.playback.controller.PlaybackController
 import org.koin.compose.koinInject
@@ -41,7 +46,15 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         setContent {
-            PulseFinTheme {
+            val settingsStore: SettingsStore = koinInject()
+            val settings by settingsStore.settings.collectAsStateWithLifecycle(initialValue = Settings())
+            val view = LocalView.current
+            SideEffect {
+                val insetsController = WindowInsetsControllerCompat(window, view)
+                insetsController.isAppearanceLightStatusBars = !settings.darkTheme
+                insetsController.isAppearanceLightNavigationBars = !settings.darkTheme
+            }
+            PulseFinTheme(darkTheme = settings.darkTheme, dynamicColor = settings.dynamicColor) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
