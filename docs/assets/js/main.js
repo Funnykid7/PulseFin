@@ -42,3 +42,21 @@ if (prefersReducedMotion || !('IntersectionObserver' in window)) {
 
   revealTargets.forEach((el) => observer.observe(el));
 }
+
+// Chrome loses the Content-Disposition filename across the /releases/latest/download/
+// redirect chain (two cross-origin hops) and names the file after the raw blob URL
+// instead of "PulseFin.apk". GitHub's own release page links directly to the
+// already-resolved asset URL (one hop), which downloads correctly everywhere. Resolve
+// that same URL client-side via the (CORS-enabled) GitHub API and repoint the buttons
+// at it; if the request fails for any reason, the static /latest/download/ href already
+// in the HTML is left in place as a working fallback.
+fetch('https://api.github.com/repos/Funnykid7/PulseFin/releases/latest')
+  .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
+  .then((release) => {
+    const asset = release.assets.find((a) => a.name === 'PulseFin.apk');
+    if (!asset) return;
+    document.querySelectorAll('.js-apk-link').forEach((link) => {
+      link.href = asset.browser_download_url;
+    });
+  })
+  .catch(() => {});
