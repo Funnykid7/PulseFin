@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PulseFin — a native Android client for Jellyfin</title>
+  <meta name="description" content="PulseFin is a native Android music client for self-hosted Jellyfin servers. Material 3 Expressive design, per-track dynamic color, offline downloads, and zero telemetry." />
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/css/style.css" />
+</head>
+<body>
+
+  <header class="nav">
+    <div class="wrap nav__row">
+      <a class="nav__brand" href="#top">
+        <svg class="nav__mark" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M14 1.5C7.1 1.5 1.5 7.1 1.5 14S7.1 26.5 14 26.5 26.5 20.9 26.5 14 20.9 1.5 14 1.5Z" fill="#CDBDFF"/>
+          <path d="M11.4 9.4 19 14l-7.6 4.6V9.4Z" fill="#33265C"/>
+        </svg>
+        PulseFin
+      </a>
+      <button class="nav__toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="navLinks">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+      <ul class="nav__links" id="navLinks">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#design">Design</a></li>
+        <li><a href="#get-it">Download</a></li>
+        <li><a class="nav__gh" href="https://github.com/Funnykid7/PulseFin" target="_blank" rel="noopener">
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+          GitHub
+        </a></li>
+      </ul>
+    </div>
+  </header>
+
+  <main id="top">
+
+    <section class="hero wrap">
+      <div class="hero__row">
+        <div class="hero__copy">
+          <span class="hero__eyebrow"><span class="dot"></span>Now on v0.1.0 · Android 12+</span>
+          <h1>Your music.<br /><em>Your server.</em></h1>
+          <p>PulseFin is a native Android client for Jellyfin, built with Jetpack Compose and Material&nbsp;3 Expressive. Your library, playlists, and playback history — served by the box you already run.</p>
+          <div class="hero__actions">
+            <a class="btn btn--primary btn--lg" href="https://github.com/Funnykid7/PulseFin/releases/latest/download/PulseFin.apk" download="PulseFin.apk">Download APK</a>
+            <a class="btn btn--ghost btn--lg" href="https://github.com/Funnykid7/PulseFin" target="_blank" rel="noopener">View on GitHub</a>
+          </div>
+          <div class="hero__meta">
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/></svg>GPL-3.0</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="3"/><path d="M9 18h6"/></svg>Android 12+</span>
+            <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20"/></svg>No telemetry</span>
+          </div>
+        </div>
+        <div class="hero__visual">
+          <div class="hero__glow" aria-hidden="true"></div>
+          <div class="hero__phones">
+            <div class="phone-mockup phone-mockup--back">
+              <div class="phone-mockup__screen">
+                <img src="images/home.png" alt="PulseFin home screen showing Your Mix, Recently Added, and Liked Songs" loading="lazy" />
+              </div>
+            </div>
+            <div class="phone-mockup phone-mockup--front">
+              <div class="phone-mockup__screen">
+                <img src="images/now-playing.png" alt="PulseFin Now Playing screen, re-themed in teal to match the current album art" loading="lazy" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section features" id="features">
+      <div class="wrap">
+        <div class="section__head reveal">
+          <span class="eyebrow">Features</span>
+          <h2>Everything a Jellyfin client should do</h2>
+          <p>No half-finished mirror of the web UI — full library browsing, real playback control, and playlists that stay in sync everywhere.</p>
+        </div>
+        <div class="features-grid">
+
+          <article class="feature-card feature-card--wide reveal">
+            <div class="feature-card__icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+            </div>
+            <h3>Browse your whole library</h3>
+            <p>Home mix, Songs, Albums, Artists, and Playlists — all pulled straight from your Jellyfin server, no local-only copy to fall out of sync.</p>
+          </article>
+
+          <article class="feature-card reveal">
+            <div class="feature-card__icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+            </div>
+            <h3>Full playback control</h3>
+            <p>Reorder the queue, play next or add to queue, view lyrics — and the queue survives an app restart.</p>
+          </article>
+
+          <article class="feature-card reveal">
+            <div class="feature-card__icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h13M4 12h13M4 18h9"/><circle cx="20" cy="6" r="1.6" fill="currentColor" stroke="none"/><circle cx="20" cy="18" r="1.6" fill="currentColor" stroke="none"/></svg>
+            </div>
+            <h3>Server-backed playlists</h3>
+            <p>Create, rename, delete, and reorder — changes round-trip with the Jellyfin web UI and every other client.</p>
+          </article>
+
+          <article class="feature-card reveal">
+            <div class="feature-card__icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+            </div>
+            <h3>Offline downloads</h3>
+            <p>Keep tracks on-device for offline listening, restrict downloads to Wi-Fi, and see exactly how much space they use in Settings.</p>
+          </article>
+
+          <article class="feature-card reveal">
+            <div class="feature-card__icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 3v6h6"/></svg>
+            </div>
+            <h3>Scrobbling</h3>
+            <p>Play history and "continue listening" sync back to your server, the same as any first-party Jellyfin client.</p>
+          </article>
+
+          <article class="feature-card feature-card--wide reveal">
+            <div class="feature-card__icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4.5 8-11V5l-8-3-8 3v6c0 6.5 8 11 8 11Z"/></svg>
+            </div>
+            <h3>Zero telemetry</h3>
+            <p>No analytics, no crash reporting, no tracking of any kind. Nothing leaves your device except calls to your own Jellyfin server.</p>
+          </article>
+
+        </div>
+      </div>
+    </section>
+
+    <section class="section design" id="design">
+      <div class="wrap">
+        <div class="section__head reveal">
+          <span class="eyebrow">Design</span>
+          <h2>Material 3 Expressive, not the stock look</h2>
+          <p>PulseFin leans into M3's newer "Expressive" language instead of a default Material theme.</p>
+        </div>
+
+        <div class="showcase__row reveal">
+          <div class="showcase__media">
+            <div class="phone-mockup">
+              <div class="phone-mockup__screen">
+                <img src="images/now-playing.png" alt="Now Playing screen tinted teal to match The Legend of Zelda: Tears of the Kingdom album art" loading="lazy" />
+              </div>
+            </div>
+          </div>
+          <div class="showcase__text">
+            <span class="eyebrow">Dynamic color</span>
+            <h3>The player re-themes itself</h3>
+            <p>Now Playing pulls a color seed straight from whatever album art is on screen and builds a full tonal palette live — the whole screen shifts to match the song. Play something else, and it shifts again.</p>
+          </div>
+        </div>
+
+        <div class="showcase__row showcase__row--reverse reveal">
+          <div class="showcase__media">
+            <div class="phone-mockup">
+              <div class="phone-mockup__screen">
+                <img src="images/home.png" alt="Home screen showing the squircle-shaped Your Mix artwork cluster and circular play button" loading="lazy" />
+              </div>
+            </div>
+          </div>
+          <div class="showcase__text">
+            <span class="eyebrow">Expressive shapes</span>
+            <h3>Built with Compose's MaterialShapes</h3>
+            <p>A nine-sided cookie shape on the play button, squircle artwork, and shared-element transitions that morph album art from a list row into the full player instead of a hard cut. Haptics on the moments that matter — playback, favoriting, drag-to-reorder.</p>
+          </div>
+        </div>
+
+        <div class="showcase__row reveal">
+          <div class="showcase__media">
+            <div class="phone-mockup">
+              <div class="phone-mockup__screen">
+                <img src="images/settings.png" alt="Settings screen with dark theme, dynamic color, and download toggles" loading="lazy" />
+              </div>
+            </div>
+          </div>
+          <div class="showcase__text">
+            <span class="eyebrow">Your server, your rules</span>
+            <h3>The server is the source of truth</h3>
+            <p>Local storage is a mirror of your Jellyfin library, not a parallel data model. No analytics or crash reporting are built in — nothing leaves your device except calls to your own server.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="how-it-works">
+      <div class="wrap">
+        <div class="section__head reveal">
+          <span class="eyebrow">Getting started</span>
+          <h2>Up and running in three steps</h2>
+        </div>
+        <div class="steps">
+          <div class="step reveal">
+            <span class="step__num">01</span>
+            <h3>Point it at your server</h3>
+            <p>Enter the URL of the Jellyfin server you already run.</p>
+          </div>
+          <div class="step reveal">
+            <span class="step__num">02</span>
+            <h3>Sign in</h3>
+            <p>Use your existing Jellyfin account — nothing new to set up.</p>
+          </div>
+          <div class="step reveal">
+            <span class="step__num">03</span>
+            <h3>Play</h3>
+            <p>Your library, queue, and playlists, right where you left off.</p>
+          </div>
+        </div>
+        <div class="requirements reveal">
+          <span><strong>Requires:</strong> Android 12 (API 31) or newer</span>
+          <span><strong>Also requires:</strong> a running Jellyfin server you control</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="get-it">
+      <div class="wrap">
+        <div class="download-band reveal">
+          <h2>Get PulseFin</h2>
+          <p>Free, open source, and self-hosted. Grab the latest signed APK straight from GitHub Releases.</p>
+          <a class="btn btn--primary btn--lg" href="https://github.com/Funnykid7/PulseFin/releases/latest/download/PulseFin.apk" download="PulseFin.apk">Download APK</a>
+          <div class="download-band__secondary">
+            <a href="https://github.com/Funnykid7/PulseFin/releases" target="_blank" rel="noopener">See release notes on GitHub →</a>
+          </div>
+          <p class="download-band__meta">GPL-3.0 licensed. Independent, unofficial client — not affiliated with or endorsed by the Jellyfin project.</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <div class="footer__row">
+        <span class="footer__brand">PulseFin</span>
+        <ul class="footer__links">
+          <li><a href="https://github.com/Funnykid7/PulseFin" target="_blank" rel="noopener">GitHub</a></li>
+          <li><a href="https://github.com/Funnykid7/PulseFin/blob/main/LICENSE" target="_blank" rel="noopener">License</a></li>
+          <li><a href="https://github.com/Funnykid7/PulseFin/releases" target="_blank" rel="noopener">Releases</a></li>
+        </ul>
+      </div>
+      <p class="footer__disclaimer">GPL-3.0 &middot; Built with Jetpack Compose and Material 3 Expressive &middot; Not affiliated with or endorsed by the Jellyfin project.</p>
+    </div>
+  </footer>
+
+  <script src="assets/js/main.js"></script>
+</body>
+</html>
