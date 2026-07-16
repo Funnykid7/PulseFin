@@ -32,5 +32,10 @@ class SettingsViewModel(
 
     fun clearAllDownloads() = viewModelScope.launch { downloadRepository.clearAllDownloads() }
 
-    fun signOut() = viewModelScope.launch { authRepository.logout() }
+    fun signOut() = viewModelScope.launch {
+        // Clear Media3 downloads/cache (:core:playback) alongside the session + Room wipe
+        // (:core:data) — the two modules don't depend on each other, so this bridges them.
+        downloadRepository.clearAllDownloads()
+        authRepository.logout()
+    }
 }

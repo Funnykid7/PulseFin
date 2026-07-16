@@ -13,7 +13,7 @@ import com.pulsefin.app.ui.playlist.PlaylistDetailViewModel
 import com.pulsefin.app.ui.playlist.PlaylistsViewModel
 import com.pulsefin.app.ui.search.SearchViewModel
 import com.pulsefin.app.ui.settings.SettingsViewModel
-import org.koin.androidx.viewmodel.dsl.viewModelOf
+import org.koin.core.module.dsl.viewModelOf
 import org.koin.core.module.Module
 import org.koin.dsl.module
 

@@ -35,11 +35,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
+import com.pulsefin.app.R
 import com.pulsefin.app.ui.components.bouncyClickable
 import com.pulsefin.app.ui.components.pressScale
 import com.pulsefin.app.ui.components.sharedArtwork
@@ -70,7 +72,7 @@ class ArtistDetailViewModel(private val repository: MediaRepository) : ViewModel
         viewModelScope.launch {
             uiState = when (val result = repository.albumsForArtist(artistId)) {
                 is PulseResult.Success -> ArtistDetailUiState(isLoading = false, albums = result.data)
-                is PulseResult.Failure -> ArtistDetailUiState(isLoading = false, error = result.error.message ?: "Couldn't load artist")
+                is PulseResult.Failure -> ArtistDetailUiState(isLoading = false, error = result.error.message)
             }
         }
     }
@@ -87,7 +89,7 @@ fun ArtistDetailScreen(
 ) {
     LaunchedEffect(artistId) { viewModel.load(artistId) }
     val state = viewModel.uiState
-    val artistName = state.albums.firstOrNull()?.artistName?.ifBlank { null } ?: "Artist"
+    val artistName = state.albums.firstOrNull()?.artistName?.ifBlank { null } ?: stringResource(R.string.artist_fallback_name)
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -101,7 +103,7 @@ fun ArtistDetailScreen(
                         modifier = Modifier.pressScale(backInteraction, pressedScale = 0.9f),
                         interactionSource = backInteraction,
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
@@ -115,7 +117,7 @@ fun ArtistDetailScreen(
                 when (p) {
                     0 -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
                     1 -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                        Text(state.error.orEmpty(), color = MaterialTheme.colorScheme.error)
+                        Text(state.error ?: stringResource(R.string.artist_load_error), color = MaterialTheme.colorScheme.error)
                     }
                     else -> LazyVerticalGrid(
                         columns = GridCells.Fixed(2),

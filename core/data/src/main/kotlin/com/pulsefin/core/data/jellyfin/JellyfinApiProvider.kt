@@ -4,6 +4,7 @@ import com.pulsefin.core.data.local.SessionStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.jellyfin.sdk.Jellyfin
 import org.jellyfin.sdk.api.client.ApiClient
 
 /**
@@ -12,10 +13,9 @@ import org.jellyfin.sdk.api.client.ApiClient
  * turn a persisted session into a live, token-bearing Jellyfin client.
  */
 class JellyfinApiProvider(
-    private val jellyfinClientFactory: JellyfinClientFactory,
+    private val jellyfin: Jellyfin,
     private val sessionStore: SessionStore,
 ) {
-    private val jellyfin = jellyfinClientFactory.create()
     private val mutex = Mutex()
 
     private var cachedForToken: String? = null

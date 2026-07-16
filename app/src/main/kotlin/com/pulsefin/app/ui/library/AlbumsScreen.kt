@@ -24,12 +24,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.pulsefin.app.R
 import com.pulsefin.app.ui.components.RefreshBox
 import com.pulsefin.app.ui.components.bouncyClickable
 import com.pulsefin.app.ui.components.sharedArtwork
@@ -99,7 +101,7 @@ fun AlbumsScreen(
                             .height(200.dp),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text("No albums yet — pull to refresh.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.albums_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             } else {

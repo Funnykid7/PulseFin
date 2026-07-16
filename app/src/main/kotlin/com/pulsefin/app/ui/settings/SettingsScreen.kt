@@ -34,10 +34,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulsefin.app.BuildConfig
+import com.pulsefin.app.R
 import com.pulsefin.app.ui.components.pressScale
 import org.koin.androidx.compose.koinViewModel
 
@@ -52,12 +54,13 @@ fun SettingsScreen(
     val totalDownloadedBytes by viewModel.totalDownloadedBytes.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showClearDownloadsDialog by remember { mutableStateOf(false) }
+    var showSignOutDialog by remember { mutableStateOf(false) }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
             TopAppBar(
                 modifier = Modifier.padding(top = contentPadding.calculateTopPadding()),
-                title = { Text("Settings") },
+                title = { Text(stringResource(R.string.settings_title)) },
                 navigationIcon = {
                     val backInteraction = remember { MutableInteractionSource() }
                     IconButton(
@@ -65,7 +68,7 @@ fun SettingsScreen(
                         modifier = Modifier.pressScale(backInteraction, pressedScale = 0.9f),
                         interactionSource = backInteraction,
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
@@ -75,26 +78,29 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
             ) {
-                item { SectionHeader("Appearance") }
+                item { SectionHeader(stringResource(R.string.section_appearance)) }
                 item {
                     SwitchRow(
-                        title = "Dark theme",
+                        title = stringResource(R.string.settings_dark_theme),
                         checked = settings.darkTheme,
                         onCheckedChange = viewModel::setDarkTheme,
                     )
                 }
                 item {
                     SwitchRow(
-                        title = "Dynamic color",
+                        title = stringResource(R.string.settings_dynamic_color),
                         checked = settings.dynamicColor,
                         onCheckedChange = viewModel::setDynamicColor,
                     )
                 }
 
-                item { SectionHeader("Downloads") }
+                item { SectionHeader(stringResource(R.string.section_downloads)) }
                 item {
                     Text(
-                        text = "Downloaded songs use ${Formatter.formatShortFileSize(context, totalDownloadedBytes)}",
+                        text = stringResource(
+                            R.string.settings_downloaded_size,
+                            Formatter.formatShortFileSize(context, totalDownloadedBytes),
+                        ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -102,7 +108,7 @@ fun SettingsScreen(
                 }
                 item {
                     SwitchRow(
-                        title = "Prefer downloads on cellular",
+                        title = stringResource(R.string.settings_prefer_cellular),
                         checked = settings.preferDownloadsOnCellular,
                         onCheckedChange = viewModel::setPreferDownloadsOnCellular,
                     )
@@ -112,14 +118,14 @@ fun SettingsScreen(
                         onClick = { showClearDownloadsDialog = true },
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     ) {
-                        Text("Clear all downloads")
+                        Text(stringResource(R.string.settings_clear_downloads))
                     }
                 }
 
-                item { SectionHeader("About") }
+                item { SectionHeader(stringResource(R.string.section_about)) }
                 item {
                     Text(
-                        text = "PulseFin v${BuildConfig.VERSION_NAME}",
+                        text = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -129,12 +135,12 @@ fun SettingsScreen(
                 item { HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp)) }
                 item {
                     OutlinedButton(
-                        onClick = viewModel::signOut,
+                        onClick = { showSignOutDialog = true },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 20.dp),
                     ) {
-                        Text("Sign out")
+                        Text(stringResource(R.string.action_sign_out))
                     }
                 }
             }
@@ -144,16 +150,33 @@ fun SettingsScreen(
     if (showClearDownloadsDialog) {
         AlertDialog(
             onDismissRequest = { showClearDownloadsDialog = false },
-            title = { Text("Clear all downloads?") },
-            text = { Text("This removes every downloaded song from this device. You can download them again anytime.") },
+            title = { Text(stringResource(R.string.settings_clear_downloads_confirm_title)) },
+            text = { Text(stringResource(R.string.settings_clear_downloads_confirm_body)) },
             confirmButton = {
                 TextButton(onClick = {
                     showClearDownloadsDialog = false
                     viewModel.clearAllDownloads()
-                }) { Text("Clear", color = MaterialTheme.colorScheme.error) }
+                }) { Text(stringResource(R.string.action_clear), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { showClearDownloadsDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showClearDownloadsDialog = false }) { Text(stringResource(R.string.action_cancel)) }
+            },
+        )
+    }
+
+    if (showSignOutDialog) {
+        AlertDialog(
+            onDismissRequest = { showSignOutDialog = false },
+            title = { Text(stringResource(R.string.settings_sign_out_confirm_title)) },
+            text = { Text(stringResource(R.string.settings_sign_out_confirm_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showSignOutDialog = false
+                    viewModel.signOut()
+                }) { Text(stringResource(R.string.action_sign_out), color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSignOutDialog = false }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }

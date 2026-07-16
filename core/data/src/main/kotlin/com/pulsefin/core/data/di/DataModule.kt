@@ -49,7 +49,7 @@ val dataModule: Module = module {
     single<DownloadRequirementsProvider> { DownloadRequirementsProviderImpl(get()) }
     single { JellyfinApiProvider(get(), get()) }
 
-    single<AuthRepository> { AuthRepositoryImpl(get(), get(), get()) }
+    single<AuthRepository> { AuthRepositoryImpl(get(), get(), get(), get()) }
     single<MediaRepository> { MediaRepositoryImpl(get(), get(), get(), get(), get(), get(), get()) }
     single<StreamUrlResolver> { StreamUrlResolverImpl(get()) }
 }

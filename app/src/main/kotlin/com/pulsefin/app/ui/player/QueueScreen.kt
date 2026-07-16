@@ -6,8 +6,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,14 +22,18 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -37,16 +43,19 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pulsefin.app.R
 import com.pulsefin.app.ui.components.MediaRow
 import com.pulsefin.app.ui.components.bouncyClickable
 import com.pulsefin.app.ui.components.pressScale
@@ -130,7 +139,7 @@ fun QueueScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             TopAppBar(
                 modifier = Modifier.padding(top = topInset),
-                title = { Text("Up Next") },
+                title = { Text(stringResource(R.string.queue_title)) },
                 navigationIcon = {
                     val backInteraction = remember { MutableInteractionSource() }
                     IconButton(
@@ -138,7 +147,7 @@ fun QueueScreen(
                         modifier = Modifier.pressScale(backInteraction, pressedScale = 0.9f),
                         interactionSource = backInteraction,
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
@@ -173,55 +182,77 @@ fun QueueScreen(
                         if (item.mediaId == highlightedMediaId) 0.16f else 0f,
                         label = "queueHighlight",
                     )
-                    MediaRow(
-                        title = item.title,
-                        imageModel = item.artworkUrl,
-                        modifier = Modifier
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = highlightAlpha))
-                            .animateItem()
-                            .graphicsLayer { translationY = if (isDragged) dragOffsetY else reflowOffset }
-                            .zIndex(if (isDragged) 1f else 0f)
-                            .bouncyClickable { playbackController.playIndex(index) },
-                        subtitle = item.artist,
-                        imageSize = 48.dp,
-                        titleStyle = MaterialTheme.typography.bodyLarge,
-                        titleColor = titleColor,
-                        titleWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                        trailing = {
-                            Icon(
-                                Icons.Filled.DragHandle,
-                                contentDescription = "Reorder",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.pointerInput(index, queue.size) {
-                                    detectDragGesturesAfterLongPress(
-                                        onDragStart = {
-                                            draggedIndex = index
-                                            dragOffsetY = 0f
-                                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                                        },
-                                        onDrag = { change, dragAmount ->
-                                            change.consume()
-                                            dragOffsetY += dragAmount.y
-                                        },
-                                        onDragEnd = {
-                                            val from = draggedIndex
-                                            val moveBy = (dragOffsetY / rowHeightPx).roundToInt()
-                                            val to = (from + moveBy).coerceIn(0, queue.lastIndex)
-                                            if (from in queue.indices && from != to) {
-                                                playbackController.moveQueueItem(from, to)
-                                            }
-                                            draggedIndex = -1
-                                            dragOffsetY = 0f
-                                        },
-                                        onDragCancel = {
-                                            draggedIndex = -1
-                                            dragOffsetY = 0f
-                                        },
-                                    )
-                                },
-                            )
+                    val dismissState = rememberSwipeToDismissBoxState()
+                    SwipeToDismissBox(
+                        state = dismissState,
+                        onDismiss = { playbackController.removeFromQueue(index) },
+                        backgroundContent = {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(MaterialTheme.colorScheme.errorContainer)
+                                    .padding(horizontal = 24.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    Icons.Filled.Delete,
+                                    contentDescription = stringResource(R.string.cd_remove_from_queue),
+                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                )
+                            }
                         },
-                    )
+                    ) {
+                        MediaRow(
+                            title = item.title,
+                            imageModel = item.artworkUrl,
+                            modifier = Modifier
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = highlightAlpha))
+                                .animateItem()
+                                .graphicsLayer { translationY = if (isDragged) dragOffsetY else reflowOffset }
+                                .zIndex(if (isDragged) 1f else 0f)
+                                .bouncyClickable { playbackController.playIndex(index) },
+                            subtitle = item.artist,
+                            imageSize = 48.dp,
+                            titleStyle = MaterialTheme.typography.bodyLarge,
+                            titleColor = titleColor,
+                            titleWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                            trailing = {
+                                Icon(
+                                    Icons.Filled.DragHandle,
+                                    contentDescription = stringResource(R.string.cd_reorder),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.pointerInput(index, queue.size) {
+                                        detectDragGesturesAfterLongPress(
+                                            onDragStart = {
+                                                draggedIndex = index
+                                                dragOffsetY = 0f
+                                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                            },
+                                            onDrag = { change, dragAmount ->
+                                                change.consume()
+                                                dragOffsetY += dragAmount.y
+                                            },
+                                            onDragEnd = {
+                                                val from = draggedIndex
+                                                val moveBy = (dragOffsetY / rowHeightPx).roundToInt()
+                                                val to = (from + moveBy).coerceIn(0, queue.lastIndex)
+                                                if (from in queue.indices && from != to) {
+                                                    playbackController.moveQueueItem(from, to)
+                                                }
+                                                draggedIndex = -1
+                                                dragOffsetY = 0f
+                                            },
+                                            onDragCancel = {
+                                                draggedIndex = -1
+                                                dragOffsetY = 0f
+                                            },
+                                        )
+                                    },
+                                )
+                            },
+                        )
+                    }
                 }
             }
         }

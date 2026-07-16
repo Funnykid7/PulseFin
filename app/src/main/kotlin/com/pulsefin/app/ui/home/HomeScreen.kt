@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,9 +31,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pulsefin.app.R
 import com.pulsefin.app.ui.components.DownloadStateIndicator
 import com.pulsefin.app.ui.components.MediaRow
 import com.pulsefin.app.ui.components.RefreshBox
@@ -62,6 +65,9 @@ fun HomeScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var addToPlaylistSongId by remember { mutableStateOf<String?>(null) }
+    // derivedStateOf so recomposition only happens when this boolean flips, not on every
+    // firstVisibleItemIndex change (i.e. every row scrolled past).
+    val showScrollToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 3 } }
 
     RefreshBox(
         isRefreshing = viewModel.isRefreshing,
@@ -78,7 +84,7 @@ fun HomeScreen(
                 item {
                     Box(Modifier.fillParentMaxSize(), Alignment.Center) {
                         Text(
-                            "No songs yet — pull to refresh.",
+                            stringResource(R.string.home_empty),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -106,7 +112,7 @@ fun HomeScreen(
 
         // Only worth surfacing once you've actually scrolled a few screens deep.
         AnimatedVisibility(
-            visible = listState.firstVisibleItemIndex > 3,
+            visible = showScrollToTop,
             enter = fadeIn() + scaleIn(),
             exit = fadeOut() + scaleOut(),
             modifier = Modifier
@@ -122,7 +128,7 @@ fun HomeScreen(
                 modifier = Modifier.pressScale(interaction),
                 interactionSource = interaction,
             ) {
-                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Scroll to top")
+                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = stringResource(R.string.cd_scroll_to_top))
             }
         }
     }

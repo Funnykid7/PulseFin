@@ -44,10 +44,11 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,12 +63,14 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.pulsefin.app.R
 import com.pulsefin.app.ui.components.AnimatedPlayPauseIcon
 import com.pulsefin.app.ui.components.bouncyClickable
 import com.pulsefin.app.ui.components.pressScale
@@ -158,11 +161,12 @@ private fun NowPlayingContent(
 ) {
     val sleepRemainingMs by playbackController.sleepRemainingMs.collectAsStateWithLifecycle()
     var showSleepSheet by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val view = LocalView.current
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .pointerInput(Unit) {
+            .pointerInput(onCollapse) {
                 var totalDrag = 0f
                 detectVerticalDragGestures(
                     onDragStart = { totalDrag = 0f },
@@ -192,7 +196,7 @@ private fun NowPlayingContent(
                 modifier = Modifier.pressScale(collapseInteraction, pressedScale = 0.9f),
                 interactionSource = collapseInteraction,
             ) {
-                Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Collapse")
+                Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = stringResource(R.string.cd_collapse))
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val lyricsInteraction = remember { MutableInteractionSource() }
@@ -201,7 +205,7 @@ private fun NowPlayingContent(
                     modifier = Modifier.pressScale(lyricsInteraction, pressedScale = 0.9f),
                     interactionSource = lyricsInteraction,
                 ) {
-                    Icon(Icons.Filled.Lyrics, contentDescription = "Lyrics")
+                    Icon(Icons.Filled.Lyrics, contentDescription = stringResource(R.string.lyrics_label))
                 }
                 val sleepInteraction = remember { MutableInteractionSource() }
                 val sleepActive = sleepRemainingMs != null
@@ -212,7 +216,7 @@ private fun NowPlayingContent(
                 ) {
                     Icon(
                         Icons.Filled.Bedtime,
-                        contentDescription = "Sleep timer",
+                        contentDescription = stringResource(R.string.sleep_timer),
                         tint = if (sleepActive) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -223,7 +227,7 @@ private fun NowPlayingContent(
                     modifier = Modifier.pressScale(queueInteraction, pressedScale = 0.9f),
                     interactionSource = queueInteraction,
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = "Queue")
+                    Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = stringResource(R.string.cd_queue))
                 }
             }
         }
@@ -232,7 +236,7 @@ private fun NowPlayingContent(
         if (currentError != null) {
             PlaybackErrorBanner(
                 error = currentError,
-                onRetry = playbackController::retry,
+                onRetry = { scope.launch { playbackController.retry() } },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp),
@@ -269,14 +273,18 @@ private fun NowPlayingContent(
             ),
             label = "artScale",
         )
-        AsyncImage(
+        val context = LocalContext.current
+        val artworkRequest = remember(state.artworkUrl) {
             // Bridge with the mini-player's already-cached thumbnail so the hero shows art from
             // the first frame of the expand instead of an empty box that hard-pops (crossfade is
             // off globally) once the full-res decode lands after the slide finishes.
-            model = ImageRequest.Builder(LocalContext.current)
+            ImageRequest.Builder(context)
                 .data(state.artworkUrl)
                 .placeholderMemoryCacheKey(state.artworkUrl)
-                .build(),
+                .build()
+        }
+        AsyncImage(
+            model = artworkRequest,
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier
@@ -368,7 +376,7 @@ private fun NowPlayingContent(
             ) {
                 Icon(
                     Icons.Filled.SkipPrevious,
-                    contentDescription = "Previous",
+                    contentDescription = stringResource(R.string.cd_previous),
                     modifier = Modifier.size(32.dp),
                 )
             }
@@ -383,7 +391,7 @@ private fun NowPlayingContent(
             ) {
                 AnimatedPlayPauseIcon(
                     isPlaying = state.isPlaying,
-                    contentDescription = if (state.isPlaying) "Pause" else "Play",
+                    contentDescription = stringResource(if (state.isPlaying) R.string.state_pause else R.string.action_play),
                     modifier = Modifier.size(36.dp),
                 )
             }
@@ -398,7 +406,7 @@ private fun NowPlayingContent(
             ) {
                 Icon(
                     Icons.Filled.SkipNext,
-                    contentDescription = "Next",
+                    contentDescription = stringResource(R.string.cd_next),
                     modifier = Modifier.size(32.dp),
                 )
             }
@@ -422,7 +430,7 @@ private fun NowPlayingContent(
                     modifier = Modifier.pressScale(shuffleInteraction),
                     interactionSource = shuffleInteraction,
                 ) {
-                    Icon(Icons.Filled.Shuffle, contentDescription = "Shuffle", tint = shuffleTint)
+                    Icon(Icons.Filled.Shuffle, contentDescription = stringResource(R.string.cd_shuffle), tint = shuffleTint)
                 }
                 IconButton(
                     onClick = playbackController::cycleRepeat,
@@ -431,7 +439,7 @@ private fun NowPlayingContent(
                 ) {
                     Icon(
                         imageVector = if (state.isRepeatOne) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
-                        contentDescription = "Repeat",
+                        contentDescription = stringResource(R.string.cd_repeat),
                         tint = repeatTint,
                     )
                 }
@@ -443,7 +451,9 @@ private fun NowPlayingContent(
                 ) {
                     Icon(
                         imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                        contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                        contentDescription = stringResource(
+                            if (isFavorite) R.string.action_remove_favorite else R.string.action_add_favorite,
+                        ),
                         tint = favoriteTint,
                     )
                 }
@@ -461,11 +471,11 @@ private fun NowPlayingContent(
                         DownloadState.COMPLETED ->
                             Icon(
                                 Icons.Filled.DownloadDone,
-                                contentDescription = "Remove download",
+                                contentDescription = stringResource(R.string.action_remove_download),
                                 tint = downloadTint,
                             )
                         else ->
-                            Icon(Icons.Filled.Download, contentDescription = "Download", tint = downloadTint)
+                            Icon(Icons.Filled.Download, contentDescription = stringResource(R.string.action_download), tint = downloadTint)
                     }
                 }
             }
@@ -500,18 +510,21 @@ private fun PlaybackErrorBanner(
                 modifier = Modifier.weight(1f),
             )
             TextButton(onClick = onRetry) {
-                Text("Retry", color = MaterialTheme.colorScheme.onErrorContainer)
+                Text(stringResource(R.string.action_retry), color = MaterialTheme.colorScheme.onErrorContainer)
             }
         }
     }
 }
 
-private fun PlaybackError.toMessage(): String = when (this) {
-    PlaybackError.Network -> "Connection lost — check your network or server."
-    PlaybackError.Auth -> "Sign-in expired. Try signing out and back in."
-    PlaybackError.NotFound -> "This track is no longer available on the server."
-    PlaybackError.Unknown -> "Playback error."
-}
+@Composable
+private fun PlaybackError.toMessage(): String = stringResource(
+    when (this) {
+        PlaybackError.Network -> R.string.error_network
+        PlaybackError.Auth -> R.string.error_auth
+        PlaybackError.NotFound -> R.string.error_not_found
+        PlaybackError.Unknown -> R.string.error_unknown
+    },
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -522,28 +535,32 @@ private fun SleepTimerSheet(
     onPickTrackEnd: () -> Unit,
     onCancelTimer: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState()
+    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Text(
-            text = if (remainingMs != null) "Sleeping in ${formatTime(remainingMs)}" else "Sleep timer",
+            text = if (remainingMs != null) {
+                stringResource(R.string.sleep_timer_remaining, formatTime(remainingMs))
+            } else {
+                stringResource(R.string.sleep_timer)
+            },
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
         )
         listOf(15, 30, 45, 60).forEach { minutes ->
             ListItem(
-                headlineContent = { Text("$minutes minutes") },
+                headlineContent = { Text(stringResource(R.string.sleep_timer_minutes, minutes)) },
                 modifier = Modifier.bouncyClickable(onClick = { onPick(minutes) }),
             )
         }
         ListItem(
-            headlineContent = { Text("End of track") },
+            headlineContent = { Text(stringResource(R.string.sleep_timer_end_of_track)) },
             modifier = Modifier.bouncyClickable(onClick = onPickTrackEnd),
         )
         if (remainingMs != null) {
             ListItem(
                 headlineContent = {
-                    Text("Cancel timer", color = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(R.string.sleep_timer_cancel), color = MaterialTheme.colorScheme.primary)
                 },
                 modifier = Modifier.bouncyClickable(onClick = onCancelTimer),
             )

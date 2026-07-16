@@ -60,6 +60,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -69,6 +70,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.pulsefin.app.R
 import com.pulsefin.app.ui.home.HomeScreen
 import com.pulsefin.app.ui.home.YourMixScreen
 import com.pulsefin.app.ui.library.AlbumDetailScreen
@@ -115,14 +117,6 @@ object Routes {
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
-private val tabs = listOf(
-    Tab(Routes.HOME, "Home", Icons.Filled.Home),
-    Tab(Routes.SONGS, "Songs", Icons.Filled.LibraryMusic),
-    Tab(Routes.ALBUMS, "Albums", Icons.Filled.Album),
-    Tab(Routes.ARTISTS, "Artists", Icons.Filled.Person),
-    Tab(Routes.PLAYLISTS, "Playlists", Icons.AutoMirrored.Filled.QueueMusic),
-)
-
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun PulseFinNavHost(modifier: Modifier = Modifier) {
@@ -130,6 +124,13 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
     val playbackController = koinInject<PlaybackController>()
     val mediaRepository = koinInject<MediaRepository>()
     val scope = rememberCoroutineScope()
+    val tabs = listOf(
+        Tab(Routes.HOME, stringResource(R.string.tab_home), Icons.Filled.Home),
+        Tab(Routes.SONGS, stringResource(R.string.tab_songs), Icons.Filled.LibraryMusic),
+        Tab(Routes.ALBUMS, stringResource(R.string.tab_albums), Icons.Filled.Album),
+        Tab(Routes.ARTISTS, stringResource(R.string.tab_artists), Icons.Filled.Person),
+        Tab(Routes.PLAYLISTS, stringResource(R.string.tab_playlists), Icons.AutoMirrored.Filled.QueueMusic),
+    )
 
     // Refresh the library whenever the app returns to the foreground so newly-added songs appear
     // without a manual pull. Skip the first resume — the tab ViewModels already sync on startup.
@@ -150,10 +151,11 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
     // Surface sync failures once, centrally, instead of every screen swallowing its own
     // refreshLibrary() result — Room keeps serving the last-synced library regardless.
     val snackbarHostState = remember { SnackbarHostState() }
+    val syncErrorMessage = stringResource(R.string.home_sync_error_snackbar)
     LaunchedEffect(mediaRepository) {
         mediaRepository.observeLastSyncError().collect { error ->
             if (error != null) {
-                snackbarHostState.showSnackbar("Couldn't sync library — showing your last saved copy.")
+                snackbarHostState.showSnackbar(syncErrorMessage)
             }
         }
     }
@@ -179,7 +181,7 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
             if (isTab) {
                 LargeTopAppBar(
                     title = {
-                        Text(currentTab?.label ?: "PulseFin", color = MaterialTheme.colorScheme.primary)
+                        Text(currentTab.label, color = MaterialTheme.colorScheme.primary)
                     },
                     actions = {
                         val searchInteraction = remember { MutableInteractionSource() }
@@ -189,7 +191,7 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                             shape = searchShape(),
                             interactionSource = searchInteraction,
                         ) {
-                            Icon(Icons.Filled.Search, contentDescription = "Search")
+                            Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.cd_search))
                         }
                         Spacer(Modifier.width(8.dp))
                         val settingsInteraction = remember { MutableInteractionSource() }
@@ -198,7 +200,7 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                             modifier = Modifier.pressScale(settingsInteraction, pressedScale = 0.92f),
                             interactionSource = settingsInteraction,
                         ) {
-                            Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                            Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings_title))
                         }
                         Spacer(Modifier.width(8.dp))
                     },
@@ -220,6 +222,7 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                             state = playbackState,
                             onTogglePlayPause = playbackController::togglePlayPause,
                             onClick = { navController.navigate(Routes.NOWPLAYING) },
+                            playbackController = playbackController,
                         )
                     }
                 }

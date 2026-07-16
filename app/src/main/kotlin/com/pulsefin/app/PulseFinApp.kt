@@ -9,12 +9,20 @@ import com.pulsefin.app.di.appModule
 import com.pulsefin.app.download.DownloadStateSync
 import com.pulsefin.app.playback.PlaybackScrobbler
 import com.pulsefin.core.data.di.dataModule
+import com.pulsefin.core.domain.repository.AuthRepository
 import com.pulsefin.core.playback.di.playbackModule
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.startKoin
 
 class PulseFinApp : Application(), ImageLoaderFactory {
+
+    private val appScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     override fun onCreate() {
         super.onCreate()
@@ -23,8 +31,15 @@ class PulseFinApp : Application(), ImageLoaderFactory {
             androidContext(this@PulseFinApp)
             modules(dataModule, playbackModule, appModule)
         }
-        koinApp.koin.get<PlaybackScrobbler>().start()
-        koinApp.koin.get<DownloadStateSync>().start()
+        appScope.launch {
+            // Resolve AuthRepository (and transitively SessionStore — EncryptedSharedPreferences
+            // + a synchronous disk read) first and explicitly on IO, so that blocking init runs
+            // off the main thread as early as possible instead of racing PulseFinRoot's first
+            // composition (which also resolves AuthRepository, on the main thread) to trigger it.
+            withContext(Dispatchers.IO) { koinApp.koin.get<AuthRepository>() }
+            koinApp.koin.get<PlaybackScrobbler>().start()
+            koinApp.koin.get<DownloadStateSync>().start()
+        }
     }
 
     /**

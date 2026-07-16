@@ -47,9 +47,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.pulsefin.app.R
 import com.pulsefin.app.ui.components.pressScale
 import org.koin.androidx.compose.koinViewModel
 
@@ -97,12 +99,12 @@ fun LoginScreen(viewModel: LoginViewModel = koinViewModel()) {
             }
 
             Text(
-                text = "PulseFin",
+                text = stringResource(R.string.app_name),
                 style = MaterialTheme.typography.displaySmall,
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Text(
-                text = "Sign in to your Jellyfin server",
+                text = stringResource(R.string.login_subtitle),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -128,7 +130,7 @@ fun LoginScreen(viewModel: LoginViewModel = koinViewModel()) {
                     OutlinedTextField(
                         value = state.username,
                         onValueChange = viewModel::onUsernameChange,
-                        label = { Text("Username") },
+                        label = { Text(stringResource(R.string.label_username)) },
                         leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
                         singleLine = true,
                         enabled = !state.isSubmitting,
@@ -138,7 +140,7 @@ fun LoginScreen(viewModel: LoginViewModel = koinViewModel()) {
                     OutlinedTextField(
                         value = state.password,
                         onValueChange = viewModel::onPasswordChange,
-                        label = { Text("Password") },
+                        label = { Text(stringResource(R.string.label_password)) },
                         leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
                         singleLine = true,
                         enabled = !state.isSubmitting,
@@ -154,7 +156,11 @@ fun LoginScreen(viewModel: LoginViewModel = koinViewModel()) {
                         exit = fadeOut() + shrinkVertically(),
                     ) {
                         Text(
-                            text = state.error.orEmpty(),
+                            text = when (val error = state.error) {
+                                null -> ""
+                                is LoginError.Required -> stringResource(R.string.login_error_required)
+                                is LoginError.Failed -> error.message ?: stringResource(R.string.login_error_failed)
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.error,
                         )
@@ -182,7 +188,7 @@ fun LoginScreen(viewModel: LoginViewModel = koinViewModel()) {
                                     color = MaterialTheme.colorScheme.onPrimary,
                                 )
                             } else {
-                                Text("Sign in", style = MaterialTheme.typography.titleMedium)
+                                Text(stringResource(R.string.action_sign_in), style = MaterialTheme.typography.titleMedium)
                             }
                         }
                     }
@@ -231,7 +237,7 @@ private fun ServerAddressField(
             ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 schemeOptions.forEach { option ->
                     DropdownMenuItem(
-                        text = { Text("$option://") },
+                        text = { Text(stringResource(R.string.login_protocol_option, option)) },
                         onClick = {
                             onSchemeChange(option)
                             expanded = false
@@ -243,7 +249,7 @@ private fun ServerAddressField(
         OutlinedTextField(
             value = host,
             onValueChange = onHostChange,
-            label = { Text("Server") },
+            label = { Text(stringResource(R.string.label_server)) },
             leadingIcon = { Icon(Icons.Filled.Dns, contentDescription = null) },
             singleLine = true,
             enabled = enabled,

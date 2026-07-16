@@ -3,6 +3,8 @@ package com.pulsefin.core.playback.service
 import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Intent
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -38,6 +40,13 @@ class PlaybackService : MediaSessionService() {
         super.onCreate()
         val player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(cacheDataSourceFactory))
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(C.USAGE_MEDIA)
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                    .build(),
+                /* handleAudioFocus= */ true,
+            )
             .build()
         val sessionActivity = PendingIntent.getActivity(
             this,

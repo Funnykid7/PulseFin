@@ -30,13 +30,18 @@ class SessionStore(context: Context, private val dispatchers: AppDispatchers) {
         const val USER_ID = "user_id"
     }
 
-    private val prefs = EncryptedSharedPreferences.create(
-        context,
-        "pulsefin_session_secure",
-        MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-    )
+    // Deferred to first touch (rather than an eager field initializer) so the Keystore/crypto
+    // init this triggers doesn't run the instant SessionStore is constructed — callers are
+    // expected to force that first touch off the main thread (see PulseFinApp's warm-up).
+    private val prefs by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        EncryptedSharedPreferences.create(
+            context,
+            "pulsefin_session_secure",
+            MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+        )
+    }
 
     private val _session = MutableStateFlow(readSession())
     val session: Flow<Session?> = _session.asStateFlow()

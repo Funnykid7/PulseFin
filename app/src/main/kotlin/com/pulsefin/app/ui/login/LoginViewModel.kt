@@ -9,6 +9,12 @@ import com.pulsefin.core.common.result.PulseResult
 import com.pulsefin.core.domain.repository.AuthRepository
 import kotlinx.coroutines.launch
 
+/** Login failures, so [LoginScreen] can resolve display text via stringResource. */
+sealed interface LoginError {
+    data object Required : LoginError
+    data class Failed(val message: String?) : LoginError
+}
+
 data class LoginUiState(
     val serverScheme: String = "http",
     // Host[:port] only — no scheme. The scheme comes from serverScheme via the dropdown.
@@ -16,7 +22,7 @@ data class LoginUiState(
     val username: String = "",
     val password: String = "",
     val isSubmitting: Boolean = false,
-    val error: String? = null,
+    val error: LoginError? = null,
 )
 
 class LoginViewModel(
@@ -46,7 +52,7 @@ class LoginViewModel(
         val current = uiState
         if (current.isSubmitting) return
         if (current.serverHost.isBlank() || current.username.isBlank()) {
-            uiState = current.copy(error = "Server and username are required")
+            uiState = current.copy(error = LoginError.Required)
             return
         }
         uiState = current.copy(isSubmitting = true, error = null)
@@ -61,7 +67,7 @@ class LoginViewModel(
                 is PulseResult.Success -> uiState.copy(isSubmitting = false)
                 is PulseResult.Failure -> uiState.copy(
                     isSubmitting = false,
-                    error = result.error.message ?: "Login failed",
+                    error = LoginError.Failed(result.error.message),
                 )
             }
         }

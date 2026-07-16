@@ -2,7 +2,7 @@ package com.pulsefin.core.data.repository
 
 import com.pulsefin.core.common.dispatchers.AppDispatchers
 import com.pulsefin.core.common.result.PulseResult
-import com.pulsefin.core.data.jellyfin.JellyfinClientFactory
+import com.pulsefin.core.data.local.PulseFinDatabase
 import com.pulsefin.core.data.local.Session
 import com.pulsefin.core.data.local.SessionStore
 import com.pulsefin.core.domain.repository.AuthRepository
@@ -10,6 +10,7 @@ import com.pulsefin.core.domain.repository.AuthState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import org.jellyfin.sdk.Jellyfin
 import org.jellyfin.sdk.api.client.extensions.userApi
 import org.jellyfin.sdk.model.api.AuthenticateUserByName
 
@@ -19,12 +20,11 @@ import org.jellyfin.sdk.model.api.AuthenticateUserByName
  * session, so login/logout drive navigation reactively (set-and-forget).
  */
 class AuthRepositoryImpl(
-    jellyfinClientFactory: JellyfinClientFactory,
+    private val jellyfin: Jellyfin,
     private val sessionStore: SessionStore,
     private val dispatchers: AppDispatchers,
+    private val database: PulseFinDatabase,
 ) : AuthRepository {
-
-    private val jellyfin = jellyfinClientFactory.create()
 
     override val authState: Flow<AuthState> = sessionStore.session.map { session ->
         if (session != null) {
@@ -67,20 +67,27 @@ class AuthRepositoryImpl(
     ): PulseResult<AuthState.LoggedIn> = withContext(dispatchers.io) {
         PulseResult.runCatchingResult {
             val baseUrl = normalizeServerUrl(serverUrl)
+            val api = jellyfin.createApi(baseUrl = baseUrl, accessToken = apiKey)
+            // An API key is just a token — validate it against the server before saving a
+            // session, otherwise a typo'd URL/key would silently "succeed" with no userId,
+            // crashing later on any call that requires one (e.g. playlist creation).
+            val user = api.userApi.getCurrentUser().content
+            val resolvedName = user.name ?: "API Key"
             sessionStore.save(
                 Session(
                     serverUrl = baseUrl,
                     accessToken = apiKey,
-                    userName = "API Key",
-                    userId = null,
+                    userName = resolvedName,
+                    userId = user.id.toString(),
                 ),
             )
-            AuthState.LoggedIn(baseUrl, "API Key")
+            AuthState.LoggedIn(baseUrl, resolvedName)
         }
     }
 
     override suspend fun logout() {
         sessionStore.clear()
+        database.clearAll()
     }
 }
 
@@ -90,6 +97,8 @@ private fun normalizeServerUrl(input: String): String {
     return if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
         trimmed
     } else {
-        "http://$trimmed"
+        // Default to https: most self-hosted Jellyfin deployments sit behind a TLS-terminating
+        // reverse proxy. Users on a plain-HTTP LAN server can still type "http://" explicitly.
+        "https://$trimmed"
     }
 }

@@ -33,10 +33,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pulsefin.app.R
 import com.pulsefin.app.ui.components.DownloadStateIndicator
 import com.pulsefin.app.ui.components.MediaRow
 import com.pulsefin.app.ui.components.SongOverflowMenu
@@ -162,7 +164,7 @@ fun SearchScreen(
                 modifier = Modifier.pressScale(backInteraction, pressedScale = 0.9f),
                 interactionSource = backInteraction,
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back))
             }
             // Focus the field as the screen animates in so the keyboard is ready to type.
             val focusRequester = remember { FocusRequester() }
@@ -170,7 +172,7 @@ fun SearchScreen(
             TextField(
                 value = state.query,
                 onValueChange = viewModel::onQueryChange,
-                placeholder = { Text("Search songs, albums, artists") },
+                placeholder = { Text(stringResource(R.string.search_placeholder)) },
                 singleLine = true,
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
@@ -196,11 +198,11 @@ fun SearchScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            SectionHeader("Recent Searches")
+                            SectionHeader(stringResource(R.string.section_recent_searches))
                             TextButton(
                                 onClick = { viewModel.clearRecentSearches() },
                                 modifier = Modifier.padding(end = 8.dp),
-                            ) { Text("Clear all") }
+                            ) { Text(stringResource(R.string.action_clear_all)) }
                         }
                     }
                     items(recentSearches, key = { "rs-$it" }) { query ->
@@ -215,7 +217,7 @@ fun SearchScreen(
                 return@LazyColumn
             }
             if (results.songs.isNotEmpty()) {
-                item { SectionHeader("Songs") }
+                item { SectionHeader(stringResource(R.string.tab_songs)) }
                 itemsIndexed(
                     results.songs,
                     key = { _, s -> "s-${s.id.value}" },
@@ -234,7 +236,7 @@ fun SearchScreen(
                 }
             }
             if (results.albums.isNotEmpty()) {
-                item { SectionHeader("Albums") }
+                item { SectionHeader(stringResource(R.string.tab_albums)) }
                 itemsIndexed(
                     results.albums,
                     key = { _, a -> "al-${a.id.value}" },
@@ -251,7 +253,7 @@ fun SearchScreen(
                 }
             }
             if (results.artists.isNotEmpty()) {
-                item { SectionHeader("Artists") }
+                item { SectionHeader(stringResource(R.string.tab_artists)) }
                 itemsIndexed(
                     results.artists,
                     key = { _, a -> "ar-${a.id.value}" },
@@ -320,7 +322,7 @@ private fun RecentSearchRow(
             modifier = Modifier.pressScale(removeInteraction, pressedScale = 0.9f),
             interactionSource = removeInteraction,
         ) {
-            Icon(Icons.Filled.Close, contentDescription = "Remove")
+            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.cd_remove))
         }
     }
 }

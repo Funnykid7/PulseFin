@@ -23,6 +23,12 @@ kotlin {
     }
 }
 
+ksp {
+    // Room schema snapshots per version, so future schema changes can ship real Migration
+    // objects (diffed against these) instead of relying on the destructive-recreate fallback.
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     api(project(":core:domain"))
     implementation(project(":core:common"))

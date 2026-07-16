@@ -3,6 +3,7 @@ package com.pulsefin.core.data.repository
 import com.pulsefin.core.common.dispatchers.AppDispatchers
 import com.pulsefin.core.common.result.PulseResult
 import com.pulsefin.core.data.jellyfin.JellyfinApiProvider
+import com.pulsefin.core.data.jellyfin.ensureApiKey
 import com.pulsefin.core.data.local.AlbumDao
 import com.pulsefin.core.data.local.AlbumEntity
 import com.pulsefin.core.data.local.ArtistDao
@@ -22,6 +23,9 @@ import com.pulsefin.core.domain.model.Playlist
 import com.pulsefin.core.domain.model.Song
 import com.pulsefin.core.domain.repository.MediaRepository
 import com.pulsefin.core.domain.repository.SearchResults
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -98,15 +102,19 @@ class MediaRepositoryImpl(
                 // Dedupe the auto-sync the three tabs each kick off; pull-to-refresh forces it.
                 if (hasSyncedThisProcess && !force) return@withLock
                 val api = requireApi()
-                val songs = fetchAllItems(api, BaseItemKind.AUDIO).map { it.toSong(api) }
-                val albums = fetchAllItems(api, BaseItemKind.MUSIC_ALBUM).map { it.toAlbum(api) }
-                val artists = fetchAllItems(api, BaseItemKind.MUSIC_ARTIST).map { it.toArtist(api) }
-                val playlists = fetchAllItems(api, BaseItemKind.PLAYLIST).map { it.toPlaylist(api) }
-                // Atomic swaps -> observers see a single emission, no empty flash.
-                songDao.replaceAll(songs.map { it.toEntity() })
-                albumDao.replaceAll(albums.map { it.toEntity() })
-                artistDao.replaceAll(artists.map { it.toEntity() })
-                playlistDao.replaceAll(playlists.map { it.toEntity() })
+                coroutineScope {
+                    val songsDeferred = async { fetchAllItems(api, BaseItemKind.AUDIO).map { it.toSong(api) } }
+                    val albumsDeferred = async { fetchAllItems(api, BaseItemKind.MUSIC_ALBUM).map { it.toAlbum(api) } }
+                    val artistsDeferred = async { fetchAllItems(api, BaseItemKind.MUSIC_ARTIST).map { it.toArtist(api) } }
+                    val playlistsDeferred = async {
+                        fetchAllItems(api, BaseItemKind.PLAYLIST).map { async { it.toPlaylist(api) } }.awaitAll()
+                    }
+                    // Atomic swaps -> observers see a single emission, no empty flash.
+                    songDao.replaceAll(songsDeferred.await().map { it.toEntity() })
+                    albumDao.replaceAll(albumsDeferred.await().map { it.toEntity() })
+                    artistDao.replaceAll(artistsDeferred.await().map { it.toEntity() })
+                    playlistDao.replaceAll(playlistsDeferred.await().map { it.toEntity() })
+                }
                 hasSyncedThisProcess = true
             }
         }
@@ -172,15 +180,18 @@ class MediaRepositoryImpl(
 
     override suspend fun setFavorite(songId: String, favorite: Boolean): PulseResult<Unit> =
         withContext(dispatchers.io) {
-            PulseResult.runCatchingResult {
-                // Optimistic: update Room first so the heart flips instantly, then tell the server.
-                songDao.setFavorite(songId, favorite)
+            // Optimistic: update Room first so the heart flips instantly, then tell the server.
+            songDao.setFavorite(songId, favorite)
+            val result = PulseResult.runCatchingResult {
                 val api = requireApi()
                 val itemId = UUID.fromString(songId)
                 if (favorite) api.userLibraryApi.markFavoriteItem(itemId = itemId)
                 else api.userLibraryApi.unmarkFavoriteItem(itemId = itemId)
                 Unit
             }
+            // Roll back the optimistic write on failure so Room doesn't keep lying to the user.
+            if (result is PulseResult.Failure) songDao.setFavorite(songId, !favorite)
+            result
         }
 
     override fun observePlaylists(): Flow<List<Playlist>> =
@@ -191,7 +202,7 @@ class MediaRepositoryImpl(
             PulseResult.runCatchingResult {
                 val api = requireApi()
                 val userId = UUID.fromString(requireUserId())
-                api.playlistsApi.createPlaylist(
+                val created = api.playlistsApi.createPlaylist(
                     CreatePlaylistDto(
                         name = name,
                         ids = songIds.map { UUID.fromString(it) },
@@ -200,8 +211,8 @@ class MediaRepositoryImpl(
                         users = emptyList(),
                         isPublic = false,
                     ),
-                )
-                refreshPlaylists(api)
+                ).content
+                upsertSinglePlaylist(api, created.id)
             }
         }
 
@@ -210,16 +221,15 @@ class MediaRepositoryImpl(
             PulseResult.runCatchingResult {
                 val api = requireApi()
                 api.playlistsApi.updatePlaylist(UUID.fromString(playlistId), UpdatePlaylistDto(name = name))
-                refreshPlaylists(api)
+                upsertSinglePlaylist(api, playlistId)
             }
         }
 
     override suspend fun deletePlaylist(playlistId: String): PulseResult<Unit> =
         withContext(dispatchers.io) {
             PulseResult.runCatchingResult {
-                val api = requireApi()
-                api.libraryApi.deleteItem(UUID.fromString(playlistId))
-                refreshPlaylists(api)
+                requireApi().libraryApi.deleteItem(UUID.fromString(playlistId))
+                playlistDao.delete(playlistId)
             }
         }
 
@@ -243,28 +253,18 @@ class MediaRepositoryImpl(
                     songIds.map { UUID.fromString(it) },
                     userId,
                 )
-                refreshPlaylists(api)
+                upsertSinglePlaylist(api, playlistId)
             }
         }
 
     override suspend fun removeFromPlaylist(playlistId: String, entryIds: List<String>): PulseResult<Unit> =
         withContext(dispatchers.io) {
             PulseResult.runCatchingResult {
-                requireApi().playlistsApi.removeItemFromPlaylist(playlistId, entryIds)
-                Unit
+                val api = requireApi()
+                api.playlistsApi.removeItemFromPlaylist(playlistId, entryIds)
+                upsertSinglePlaylist(api, playlistId)
             }
         }
-
-    override suspend fun reorderPlaylistItem(
-        playlistId: String,
-        entryId: String,
-        newIndex: Int,
-    ): PulseResult<Unit> = withContext(dispatchers.io) {
-        PulseResult.runCatchingResult {
-            requireApi().playlistsApi.moveItem(playlistId, entryId, newIndex)
-            Unit
-        }
-    }
 
     // Scrobbling is best-effort telemetry to the user's own Jellyfin server (play history/"now
     // playing" on other clients) — failures are swallowed rather than surfaced, since a dropped
@@ -381,9 +381,16 @@ class MediaRepositoryImpl(
 
     private suspend fun requireUserId(): String = apiProvider.currentUserId() ?: error("Not signed in")
 
-    private suspend fun refreshPlaylists(api: ApiClient) {
-        val playlists = fetchAllItems(api, BaseItemKind.PLAYLIST).map { it.toPlaylist(api) }
-        playlistDao.replaceAll(playlists.map { it.toEntity() })
+    /**
+     * Re-fetches and upserts just the one edited playlist, instead of a full-library resync
+     * (which would otherwise re-fetch every playlist, including a per-playlist art request, for
+     * a single add/create/rename edit).
+     */
+    private suspend fun upsertSinglePlaylist(api: ApiClient, playlistId: String) {
+        val item = api.itemsApi.getItems(
+            GetItemsRequest(ids = listOf(UUID.fromString(playlistId))),
+        ).content.items.orEmpty().firstOrNull() ?: return
+        playlistDao.upsertAll(listOf(item.toPlaylist(api).toEntity()))
     }
 
     /** Pages through a playlist's items — same shape as [fetchAllItems] but via the playlist API. */
@@ -489,7 +496,10 @@ private fun BaseItemDto.artworkUrl(api: ApiClient): String? = runCatching {
     val tag = imageTags?.get(ImageType.PRIMARY) ?: return@runCatching null
     // Store the base URL; callers append the size they need via sizedArtUrl (tiny for list
     // thumbnails, larger for the Now Playing hero) so lists stay cheap to scroll.
-    api.imageApi.getItemImageUrl(itemId = id, imageType = ImageType.PRIMARY, tag = tag)
+    val url = api.imageApi.getItemImageUrl(itemId = id, imageType = ImageType.PRIMARY, tag = tag)
+    // Servers requiring authenticated image access 404 without a token — the SDK doesn't add
+    // one to this URL by itself (unlike getAudioStreamUrl, which StreamUrlResolverImpl patches).
+    ensureApiKey(url, api.accessToken)
 }.getOrNull()
 
 // --- domain <-> Room entity ---

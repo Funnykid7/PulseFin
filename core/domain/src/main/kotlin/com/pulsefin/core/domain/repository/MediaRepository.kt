@@ -56,9 +56,6 @@ interface MediaRepository {
     /** [entryIds] are playlist-entry IDs ([Song.playlistItemId]), not song IDs. */
     suspend fun removeFromPlaylist(playlistId: String, entryIds: List<String>): PulseResult<Unit>
 
-    /** [entryId] is a playlist-entry ID ([Song.playlistItemId]), not a song ID. */
-    suspend fun reorderPlaylistItem(playlistId: String, entryId: String, newIndex: Int): PulseResult<Unit>
-
     /** Tells the Jellyfin server playback of [songId] started, for play-history/"now playing". */
     suspend fun reportPlaybackStart(songId: String, playSessionId: String)
 

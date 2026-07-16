@@ -3,6 +3,7 @@ package com.pulsefin.app.ui.library
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -43,6 +44,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -51,6 +53,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.pulsefin.app.R
 import com.pulsefin.app.ui.components.DownloadStateIndicator
 import com.pulsefin.app.ui.components.bouncyClickable
 import com.pulsefin.app.ui.components.pressScale
@@ -98,7 +101,7 @@ class AlbumDetailViewModel(
         viewModelScope.launch {
             uiState = when (val result = repository.songsForAlbum(albumId)) {
                 is PulseResult.Success -> AlbumDetailUiState(isLoading = false, tracks = result.data)
-                is PulseResult.Failure -> AlbumDetailUiState(isLoading = false, error = result.error.message ?: "Couldn't load album")
+                is PulseResult.Failure -> AlbumDetailUiState(isLoading = false, error = result.error.message)
             }
         }
     }
@@ -136,7 +139,7 @@ fun AlbumDetailScreen(
     LaunchedEffect(albumId) { viewModel.load(albumId) }
     val state = viewModel.uiState
     val downloadStates by viewModel.downloadStates.collectAsStateWithLifecycle()
-    val albumName = state.tracks.firstOrNull()?.albumName?.ifBlank { null } ?: "Album"
+    val albumName = state.tracks.firstOrNull()?.albumName?.ifBlank { null } ?: stringResource(R.string.album_fallback_name)
     // The nav-arg art renders the hero (and seeds Monet) immediately; tracks refine it later.
     val baseArt = state.tracks.firstOrNull()?.artworkUrl ?: initialArtUrl
     val artUrl = sizedArtUrl(baseArt, 512)
@@ -156,7 +159,7 @@ fun AlbumDetailScreen(
                             modifier = Modifier.pressScale(backInteraction, pressedScale = 0.9f),
                             interactionSource = backInteraction,
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back))
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
@@ -182,13 +185,16 @@ fun AlbumDetailScreen(
                     }
                     when {
                         state.isLoading -> item(contentType = "status") {
-                            Box1(modifier = Modifier.fillParentMaxWidth().padding(vertical = 48.dp)) {
+                            Box(modifier = Modifier.fillParentMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
                                 LoadingIndicator()
                             }
                         }
                         state.error != null -> item(contentType = "status") {
-                            Box1(modifier = Modifier.fillParentMaxWidth().padding(vertical = 48.dp)) {
-                                Text(state.error, color = MaterialTheme.colorScheme.error)
+                            Box(modifier = Modifier.fillParentMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
+                                Text(
+                                    state.error,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
                             }
                         }
                         else -> itemsIndexed(
@@ -258,7 +264,7 @@ private fun AlbumHeader(
             ) {
                 Icon(Icons.Filled.PlayArrow, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text("Play")
+                Text(stringResource(R.string.action_play))
             }
             val downloadInteraction = remember { MutableInteractionSource() }
             OutlinedButton(
@@ -272,7 +278,11 @@ private fun AlbumHeader(
                     contentDescription = null,
                 )
                 Spacer(Modifier.width(8.dp))
-                Text(if (allDownloaded) "Remove downloads" else "Download all")
+                Text(
+                    stringResource(
+                        if (allDownloaded) R.string.action_remove_downloads_all else R.string.action_download_all,
+                    ),
+                )
             }
         }
     }
@@ -323,16 +333,11 @@ private fun TrackRow(
         IconButton(onClick = onToggleDownload) {
             Icon(
                 if (downloadState == DownloadState.COMPLETED) Icons.Filled.DownloadDone else Icons.Filled.Download,
-                contentDescription = if (downloadState == DownloadState.COMPLETED) "Remove download" else "Download",
+                contentDescription = stringResource(
+                    if (downloadState == DownloadState.COMPLETED) R.string.action_remove_download else R.string.action_download,
+                ),
             )
         }
     }
 }
 
-@Composable
-private fun Box1(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    androidx.compose.foundation.layout.Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center,
-    ) { content() }
-}

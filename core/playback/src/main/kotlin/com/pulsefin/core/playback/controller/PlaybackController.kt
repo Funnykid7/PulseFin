@@ -23,6 +23,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -61,7 +64,6 @@ sealed interface PlaybackError {
 private val NETWORK_ERROR_CODES = setOf(
     PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
     PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
-    PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
 )
 
 private fun PlaybackException.toDomainError(): PlaybackError {
@@ -160,8 +162,22 @@ class PlaybackController(
         }, context.mainExecutor)
     }
 
-    /** Re-prepares the current item after a playback error (e.g. the server came back). */
-    fun retry() {
+    /**
+     * Recovers from a playback error. Auth errors (401) mean the queued items' stream URLs —
+     * which have an access token baked in — are stale, so re-preparing the same URLs would just
+     * fail again; those are re-resolved and swapped in first. Other errors (e.g. a network blip)
+     * just need the existing item re-prepared.
+     */
+    suspend fun retry() {
+        if (_state.value.error == PlaybackError.Auth) {
+            val current = controller ?: return
+            val refreshed = (0 until current.mediaItemCount).mapNotNull { i ->
+                val item = current.getMediaItemAt(i)
+                streamUrlResolver.resolveStreamUrl(item.mediaId)?.let { item.withRefreshedUri(it) }
+            }
+            if (refreshed.isEmpty()) return
+            withController { it.replaceMediaItems(0, current.mediaItemCount, refreshed) }
+        }
         withController { controller ->
             controller.prepare()
             controller.play()
@@ -183,10 +199,16 @@ class PlaybackController(
 
     suspend fun play(songs: List<Song>, startIndex: Int) {
         if (songs.isEmpty()) return
-        val items = songs.mapNotNull { it.toMediaItem(streamUrlResolver) }
+        // Capture the target song's id before resolving: resolution can drop entries (a failed
+        // lookup returns null), which would otherwise shift startIndex onto the wrong track.
+        val targetMediaId = songs.getOrNull(startIndex)?.id?.value
+        val items = coroutineScope {
+            songs.map { async { it.toMediaItem(streamUrlResolver) } }.awaitAll()
+        }.filterNotNull()
         if (items.isEmpty()) return
+        val resolvedIndex = items.indexOfFirst { it.mediaId == targetMediaId }.takeIf { it >= 0 } ?: 0
         withController { controller ->
-            controller.setMediaItems(items, startIndex.coerceIn(0, items.lastIndex), 0L)
+            controller.setMediaItems(items, resolvedIndex, 0L)
             controller.prepare()
             controller.play()
         }
@@ -326,7 +348,6 @@ class PlaybackController(
     // Fires on discrete events (track transitions, play/pause, seeks, queue edits) — not every
     // position tick — so this is cheap enough to call unconditionally from updateQueue().
     private fun persistQueueState(player: Player) {
-        if (player.mediaItemCount == 0) return
         val items = (0 until player.mediaItemCount).map { i ->
             val item = player.getMediaItemAt(i)
             val md = item.mediaMetadata
@@ -338,7 +359,8 @@ class PlaybackController(
                 artworkUrl = md.artworkUri?.toString(),
             )
         }
-        if (items.isEmpty()) return
+        // Persist the empty state too — otherwise clearing the queue never saves, and the last
+        // non-empty queue keeps coming back on relaunch.
         val state = PersistedQueueState(
             items = items,
             currentIndex = player.currentMediaItemIndex,
@@ -367,11 +389,19 @@ class PlaybackController(
     }
 }
 
+/** Rebuilds this item with a freshly-resolved stream URL, keeping id/cache key/metadata intact. */
+private fun MediaItem.withRefreshedUri(newUri: String): MediaItem =
+    buildUpon().setUri(newUri).build()
+
 private suspend fun Song.toMediaItem(resolver: StreamUrlResolver): MediaItem? {
     val uri = resolver.resolveStreamUrl(id.value) ?: return null
     return MediaItem.Builder()
         .setUri(uri)
         .setMediaId(id.value)
+        // Jellyfin stream URLs embed a dynamic auth token, so the URL itself can't be the cache
+        // key (Media3's default) — a token refresh would otherwise orphan a downloaded track's
+        // cache entry. Pin the key to the stable media id instead.
+        .setCustomCacheKey(id.value)
         .setMediaMetadata(
             MediaMetadata.Builder()
                 .setTitle(title)

@@ -49,11 +49,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import com.pulsefin.app.R
 import com.pulsefin.app.ui.components.DownloadStateIndicator
 import com.pulsefin.app.ui.components.MediaRow
 import com.pulsefin.app.ui.components.bouncyClickable
@@ -155,7 +157,7 @@ class PlaylistDetailViewModel(
                 is PulseResult.Success -> PlaylistDetailUiState(isLoading = false, songs = result.data)
                 is PulseResult.Failure -> PlaylistDetailUiState(
                     isLoading = false,
-                    error = result.error.message ?: "Couldn't load playlist",
+                    error = result.error.message,
                 )
             }
         }
@@ -185,7 +187,13 @@ fun PlaylistDetailScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             TopAppBar(
                 modifier = Modifier.padding(top = contentPadding.calculateTopPadding()),
-                title = { Text(playlist?.name ?: "Playlist", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                title = {
+                    Text(
+                        playlist?.name ?: stringResource(R.string.playlist_fallback_name),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
                 navigationIcon = {
                     val backInteraction = remember { MutableInteractionSource() }
                     IconButton(
@@ -193,22 +201,22 @@ fun PlaylistDetailScreen(
                         modifier = Modifier.pressScale(backInteraction, pressedScale = 0.9f),
                         interactionSource = backInteraction,
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back))
                     }
                 },
                 actions = {
                     Box {
                         IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.cd_more))
                         }
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                             DropdownMenuItem(
-                                text = { Text("Rename") },
+                                text = { Text(stringResource(R.string.action_rename)) },
                                 leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
                                 onClick = { showMenu = false; showRenameDialog = true },
                             )
                             DropdownMenuItem(
-                                text = { Text("Delete") },
+                                text = { Text(stringResource(R.string.action_delete)) },
                                 leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) },
                                 onClick = { showMenu = false; showDeleteDialog = true },
                             )
@@ -244,7 +252,7 @@ fun PlaylistDetailScreen(
                     }
                     state.songs.isEmpty() -> item(contentType = "status") {
                         Box(modifier = Modifier.fillParentMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
-                            Text("No songs yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(stringResource(R.string.playlist_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     else -> itemsIndexed(
@@ -275,11 +283,13 @@ fun PlaylistDetailScreen(
                                             } else {
                                                 Icons.Filled.Download
                                             },
-                                            contentDescription = if (downloadState == DownloadState.COMPLETED) {
-                                                "Remove download"
-                                            } else {
-                                                "Download"
-                                            },
+                                            contentDescription = stringResource(
+                                                if (downloadState == DownloadState.COMPLETED) {
+                                                    R.string.action_remove_download
+                                                } else {
+                                                    R.string.action_download
+                                                },
+                                            ),
                                         )
                                     }
                                     val entryId = song.playlistItemId
@@ -287,7 +297,7 @@ fun PlaylistDetailScreen(
                                         IconButton(onClick = { viewModel.removeSong(entryId) }) {
                                             Icon(
                                                 Icons.Filled.RemoveCircleOutline,
-                                                contentDescription = "Remove from playlist",
+                                                contentDescription = stringResource(R.string.cd_remove_from_playlist),
                                             )
                                         }
                                     }
@@ -311,16 +321,16 @@ fun PlaylistDetailScreen(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete playlist?") },
-            text = { Text("This removes \"${playlist?.name.orEmpty()}\" from the server. This can't be undone.") },
+            title = { Text(stringResource(R.string.playlist_delete_confirm_title)) },
+            text = { Text(stringResource(R.string.playlist_delete_confirm_body, playlist?.name.orEmpty())) },
             confirmButton = {
                 TextButton(onClick = {
                     showDeleteDialog = false
                     viewModel.delete(onDeleted = onBack)
-                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                }) { Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showDeleteDialog = false }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }
@@ -331,12 +341,12 @@ private fun RenamePlaylistDialog(initialName: String, onDismiss: () -> Unit, onR
     var name by remember { mutableStateOf(initialName) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Rename playlist") },
+        title = { Text(stringResource(R.string.playlist_rename_title)) },
         text = {
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { Text("Name") },
+                label = { Text(stringResource(R.string.label_name)) },
                 singleLine = true,
                 shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth(),
@@ -344,11 +354,11 @@ private fun RenamePlaylistDialog(initialName: String, onDismiss: () -> Unit, onR
         },
         confirmButton = {
             TextButton(onClick = { onRename(name.trim()) }, enabled = name.isNotBlank()) {
-                Text("Save")
+                Text(stringResource(R.string.action_save))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         },
     )
 }
@@ -367,7 +377,7 @@ private fun PlaylistDetailHeader(
     ) {
         Text(name, style = MaterialTheme.typography.headlineSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Text(
-            "$songCount songs",
+            stringResource(R.string.playlist_song_count, songCount),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -382,7 +392,7 @@ private fun PlaylistDetailHeader(
             ) {
                 Icon(Icons.Filled.PlayArrow, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text("Play")
+                Text(stringResource(R.string.action_play))
             }
             val downloadInteraction = remember { MutableInteractionSource() }
             OutlinedButton(
@@ -396,7 +406,11 @@ private fun PlaylistDetailHeader(
                     contentDescription = null,
                 )
                 Spacer(Modifier.width(8.dp))
-                Text(if (allDownloaded) "Remove downloads" else "Download all")
+                Text(
+                    stringResource(
+                        if (allDownloaded) R.string.action_remove_downloads_all else R.string.action_download_all,
+                    ),
+                )
             }
         }
     }

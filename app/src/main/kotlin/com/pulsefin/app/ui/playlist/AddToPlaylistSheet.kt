@@ -11,8 +11,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,8 +21,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pulsefin.app.R
 import com.pulsefin.app.ui.components.bouncyClickable
 import com.pulsefin.core.domain.repository.MediaRepository
 import kotlinx.coroutines.launch
@@ -38,33 +41,40 @@ fun AddToPlaylistSheet(
     val playlists by repository.observePlaylists().collectAsStateWithLifecycle(emptyList())
     val scope = rememberCoroutineScope()
     var showCreateDialog by remember { mutableStateOf(false) }
-    val sheetState = rememberModalBottomSheetState()
+    // Guards against a fast double-tap firing addToPlaylist/createPlaylist twice for the same
+    // request before the in-flight call dismisses this sheet.
+    var isSubmitting by remember { mutableStateOf(false) }
+    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Text(
-            text = "Add to playlist",
+            text = stringResource(R.string.song_menu_add_to_playlist),
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
         )
         ListItem(
-            headlineContent = { Text("New playlist") },
+            headlineContent = { Text(stringResource(R.string.playlist_new)) },
             leadingContent = { Icon(Icons.Filled.Add, contentDescription = null) },
-            modifier = Modifier.bouncyClickable(onClick = { showCreateDialog = true }),
+            modifier = Modifier.bouncyClickable(enabled = !isSubmitting, onClick = { showCreateDialog = true }),
         )
         playlists.forEach { playlist ->
             ListItem(
                 headlineContent = { Text(playlist.name) },
                 leadingContent = { Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null) },
-                modifier = Modifier.bouncyClickable(onClick = {
-                    // Dismissing removes this composable (and its rememberCoroutineScope) from
-                    // composition, which would cancel addToPlaylist() mid-flight if dismissal
-                    // happened first — await it, then dismiss.
-                    scope.launch {
-                        repository.addToPlaylist(playlist.id.value, listOf(songId))
-                        onDismiss()
-                    }
-                }),
+                modifier = Modifier.bouncyClickable(
+                    enabled = !isSubmitting,
+                    onClick = {
+                        // Dismissing removes this composable (and its rememberCoroutineScope) from
+                        // composition, which would cancel addToPlaylist() mid-flight if dismissal
+                        // happened first — await it, then dismiss.
+                        isSubmitting = true
+                        scope.launch {
+                            repository.addToPlaylist(playlist.id.value, listOf(songId))
+                            onDismiss()
+                        }
+                    },
+                ),
             )
         }
         Spacer(Modifier.size(16.dp))
@@ -75,6 +85,7 @@ fun AddToPlaylistSheet(
             onDismiss = { showCreateDialog = false },
             onCreate = { name ->
                 showCreateDialog = false
+                isSubmitting = true
                 scope.launch {
                     repository.createPlaylist(name, listOf(songId))
                     onDismiss()

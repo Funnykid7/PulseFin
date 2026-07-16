@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -41,6 +42,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.pulsefin.app.R
 import com.pulsefin.app.ui.components.MediaRow
 import com.pulsefin.app.ui.components.RefreshBox
 import com.pulsefin.app.ui.components.bouncyClickable
@@ -148,7 +150,7 @@ fun YourMixScreen(
             }
 
             if (recent.isNotEmpty()) {
-                item(key = "recent-header") { SectionHeader("Recently Added") }
+                item(key = "recent-header") { SectionHeader(stringResource(R.string.section_recently_added)) }
                 item(key = "recent-row") {
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 16.dp),
@@ -165,7 +167,7 @@ fun YourMixScreen(
             }
 
             if (favorites.isNotEmpty()) {
-                item(key = "liked-header") { SectionHeader("Liked Songs") }
+                item(key = "liked-header") { SectionHeader(stringResource(R.string.section_liked_songs)) }
                 itemsIndexed(
                     favorites,
                     key = { _, song -> "fav-${song.id.value}" },
@@ -198,13 +200,13 @@ private fun YourMixHero(clusterArt: List<String>, onShufflePlay: () -> Unit) {
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "Your Mix",
+                text = stringResource(R.string.home_your_mix),
                 style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Text(
-                text = "Today's mix for you",
+                text = stringResource(R.string.home_todays_mix),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp),
@@ -221,7 +223,7 @@ private fun YourMixHero(clusterArt: List<String>, onShufflePlay: () -> Unit) {
             ) {
                 Icon(
                     Icons.Filled.PlayArrow,
-                    contentDescription = "Shuffle all",
+                    contentDescription = stringResource(R.string.home_shuffle_all),
                     modifier = Modifier.size(28.dp),
                 )
             }

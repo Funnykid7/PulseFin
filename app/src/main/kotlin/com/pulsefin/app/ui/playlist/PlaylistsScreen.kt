@@ -34,12 +34,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
+import com.pulsefin.app.R
 import com.pulsefin.app.ui.components.RefreshBox
 import com.pulsefin.app.ui.components.bouncyClickable
 import com.pulsefin.app.ui.components.pressScale
@@ -113,7 +115,7 @@ fun PlaylistsScreen(
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                "No playlists yet — tap + to create one.",
+                                stringResource(R.string.playlists_empty),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -143,7 +145,7 @@ fun PlaylistsScreen(
                 .pressScale(fabInteraction),
             interactionSource = fabInteraction,
         ) {
-            Icon(Icons.Filled.Add, contentDescription = "New playlist")
+            Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.playlist_new))
         }
     }
 
@@ -173,7 +175,7 @@ private fun PlaylistCard(playlist: Playlist, onClick: () -> Unit, modifier: Modi
             modifier = Modifier.padding(top = 6.dp),
         )
         Text(
-            text = "${playlist.songCount} songs",
+            text = stringResource(R.string.playlist_song_count, playlist.songCount),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

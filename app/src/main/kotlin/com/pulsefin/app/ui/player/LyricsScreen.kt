@@ -33,10 +33,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pulsefin.app.R
 import com.pulsefin.app.ui.components.pressScale
 import com.pulsefin.app.ui.theme.ArtworkTheme
 import com.pulsefin.core.common.result.PulseResult
@@ -102,7 +104,7 @@ fun LyricsScreen(
                                 mode = LyricsMode.Synced
                             },
                             shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                        ) { Text("Synced") }
+                        ) { Text(stringResource(R.string.lyrics_synced)) }
                         SegmentedButton(
                             selected = mode == LyricsMode.Static,
                             onClick = {
@@ -110,13 +112,13 @@ fun LyricsScreen(
                                 mode = LyricsMode.Static
                             },
                             shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                        ) { Text("Static") }
+                        ) { Text(stringResource(R.string.lyrics_static)) }
                     }
                 }
 
                 when {
-                    loading -> EmptyState("Loading lyrics…")
-                    current == null || current.isEmpty -> EmptyState("No lyrics available")
+                    loading -> EmptyState(stringResource(R.string.lyrics_loading))
+                    current == null || current.isEmpty -> EmptyState(stringResource(R.string.lyrics_empty))
                     else -> LyricLines(
                         lyrics = current,
                         positionMs = positionMs,
@@ -142,10 +144,10 @@ private fun LyricsTopBar(onBack: () -> Unit, title: String) {
             modifier = Modifier.pressScale(backInteraction, pressedScale = 0.9f),
             interactionSource = backInteraction,
         ) {
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.cd_back))
         }
         Text(
-            text = title.ifBlank { "Lyrics" },
+            text = title.ifBlank { stringResource(R.string.lyrics_label) },
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onBackground,
             maxLines = 1,
@@ -156,8 +158,10 @@ private fun LyricsTopBar(onBack: () -> Unit, title: String) {
 
 @Composable
 private fun LyricLines(lyrics: Lyrics, positionMs: Long, highlightActive: Boolean) {
+    // indexOfLast already returns -1 when no line's timestamp has been reached yet (e.g. during
+    // an instrumental intro) — leave that as "nothing highlighted" rather than clamping to line 0.
     val activeIndex = if (highlightActive) {
-        lyrics.lines.indexOfLast { (it.startMs ?: Long.MAX_VALUE) <= positionMs }.coerceAtLeast(0)
+        lyrics.lines.indexOfLast { (it.startMs ?: Long.MAX_VALUE) <= positionMs }
     } else -1
 
     val listState = rememberLazyListState()

@@ -7,7 +7,7 @@ import com.pulsefin.core.domain.repository.MediaRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
@@ -22,34 +22,39 @@ class DownloadStateSync(
     private val downloadDao: DownloadDao,
     private val mediaRepository: MediaRepository,
 ) {
-    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     fun start() {
         scope.launch {
             var previousSongIds = emptySet<String>()
-            downloadRepository.observeDownloads().collect { downloads ->
-                val songsById = mediaRepository.observeSongs().first().associateBy { it.id.value }
-                downloads.forEach { (songId, download) ->
-                    val song = songsById[songId]
-                    downloadDao.upsert(
-                        DownloadEntity(
-                            songId,
-                            song?.title.orEmpty(),
-                            song?.artistName.orEmpty(),
-                            song?.artworkUrl,
-                            download.state.name,
-                            download.progressPercent,
-                            download.bytesDownloaded,
-                            download.totalBytes,
-                            System.currentTimeMillis(),
-                        ),
-                    )
+            // combine() reuses each flow's latest emitted value rather than re-querying Room on
+            // every download progress tick (which fired multiple times per second on Main).
+            combine(
+                downloadRepository.observeDownloads(),
+                mediaRepository.observeSongs(),
+            ) { downloads, songs -> downloads to songs.associateBy { it.id.value } }
+                .collect { (downloads, songsById) ->
+                    downloads.forEach { (songId, download) ->
+                        val song = songsById[songId]
+                        downloadDao.upsert(
+                            DownloadEntity(
+                                songId,
+                                song?.title.orEmpty(),
+                                song?.artistName.orEmpty(),
+                                song?.artworkUrl,
+                                download.state.name,
+                                download.progressPercent,
+                                download.bytesDownloaded,
+                                download.totalBytes,
+                                System.currentTimeMillis(),
+                            ),
+                        )
+                    }
+                    (previousSongIds - downloads.keys).forEach { removedSongId ->
+                        downloadDao.delete(removedSongId)
+                    }
+                    previousSongIds = downloads.keys
                 }
-                (previousSongIds - downloads.keys).forEach { removedSongId ->
-                    downloadDao.delete(removedSongId)
-                }
-                previousSongIds = downloads.keys
-            }
         }
     }
 }

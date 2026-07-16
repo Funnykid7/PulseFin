@@ -147,6 +147,9 @@ interface PlaylistDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(playlists: List<PlaylistEntity>)
 
+    @Query("DELETE FROM playlists WHERE id = :id")
+    suspend fun delete(id: String)
+
     @Query("DELETE FROM playlists")
     suspend fun clear()
 
@@ -194,7 +197,7 @@ interface DownloadDao {
         PlaylistEntity::class, DownloadEntity::class,
     ],
     version = 9,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class PulseFinDatabase : RoomDatabase() {
     abstract fun songDao(): SongDao
@@ -204,14 +207,39 @@ abstract class PulseFinDatabase : RoomDatabase() {
     abstract fun playlistDao(): PlaylistDao
     abstract fun downloadDao(): DownloadDao
 
+    /** Wipes every locally-mirrored table — used on logout so no trace of the prior user remains. */
+    @Transaction
+    open suspend fun clearAll() {
+        songDao().clear()
+        albumDao().clear()
+        artistDao().clear()
+        recentSearchDao().clearAll()
+        playlistDao().clear()
+        downloadDao().clearAll()
+    }
+
     companion object {
-        fun build(context: Context): PulseFinDatabase =
-            Room.databaseBuilder(
+        fun build(context: Context): PulseFinDatabase {
+            // This is a single-user local cache (songs/albums/artists/playlists are re-synced
+            // from the Jellyfin server; downloaded files survive via Media3's own index, only
+            // the DownloadEntity metadata here is rebuilt) rather than a system of record, so a
+            // rebuilt-from-scratch cache on a schema bump is a better outcome for users than an
+            // unrecoverable crash loop on every relaunch. Applies to all build types.
+            //
+            // Schemas are now exported to core/data/schemas/ (see build.gradle.kts's
+            // room.schemaLocation), so a real Migration can be diffed and added via
+            // .addMigrations(Migration(from, to) { db -> ... }) whenever a schema change would
+            // lose data users actually care about (e.g. recent_searches, which today is the only
+            // table not re-derivable from the server and would be silently dropped by the
+            // fallback below). Until such a migration is added, destructive recreation remains
+            // the safety net.
+            return Room.databaseBuilder(
                 context.applicationContext,
                 PulseFinDatabase::class.java,
                 "pulsefin.db",
             )
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
+        }
     }
 }
