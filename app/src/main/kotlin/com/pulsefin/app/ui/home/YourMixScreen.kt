@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -98,7 +97,10 @@ class YourMixViewModel(
                 is PulseResult.Success -> r.data
                 is PulseResult.Failure -> recentlyAdded
             }
-            isRefreshing = false
+            // Only this call's own isRefreshing=true should be cleared by it — otherwise a
+            // concurrently-running non-forced sync can clear the spinner for a still-in-progress
+            // forced (pull-to-refresh) one.
+            if (force) isRefreshing = false
         }
     }
 
@@ -107,7 +109,13 @@ class YourMixViewModel(
         if (all.isNotEmpty()) viewModelScope.launch { playbackController.play(all.shuffled(), 0) }
     }
 
-    fun onFavoriteClick(index: Int) = viewModelScope.launch { playbackController.play(favoriteSongs.value, index) }
+    // Resolve by id against the current list at click time rather than trusting a captured list
+    // index — a concurrent library sync that reorders songs between render and click would
+    // otherwise play the wrong track.
+    fun onFavoriteClick(song: Song) = viewModelScope.launch {
+        val index = favoriteSongs.value.indexOfFirst { it.id.value == song.id.value }
+        if (index >= 0) playbackController.play(favoriteSongs.value, index)
+    }
 }
 
 /**
@@ -168,16 +176,16 @@ fun YourMixScreen(
 
             if (favorites.isNotEmpty()) {
                 item(key = "liked-header") { SectionHeader(stringResource(R.string.section_liked_songs)) }
-                itemsIndexed(
+                items(
                     favorites,
-                    key = { _, song -> "fav-${song.id.value}" },
-                    contentType = { _, _ -> "song" },
-                ) { index, song ->
+                    key = { song -> "fav-${song.id.value}" },
+                    contentType = { "song" },
+                ) { song ->
                     MediaRow(
                         title = song.title,
                         imageModel = sizedArtUrl(song.artworkUrl, 180),
                         modifier = Modifier
-                            .bouncyClickable(onClick = { viewModel.onFavoriteClick(index) })
+                            .bouncyClickable(onClick = { viewModel.onFavoriteClick(song) })
                             .animateItem(),
                         subtitle = song.artistName,
                         titleColor = if (song.id.value == currentMediaId)

@@ -35,6 +35,8 @@ import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -69,9 +71,12 @@ import com.pulsefin.core.domain.repository.DownloadRepository
 import com.pulsefin.core.domain.repository.MediaRepository
 import com.pulsefin.core.playback.controller.PlaybackController
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -119,16 +124,23 @@ class PlaylistDetailViewModel(
         }
     }
 
+    private val _actionError = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val actionError: SharedFlow<Unit> = _actionError.asSharedFlow()
+
     fun rename(name: String) {
         val id = _playlistId.value ?: return
-        viewModelScope.launch { repository.renamePlaylist(id, name) }
+        viewModelScope.launch {
+            if (repository.renamePlaylist(id, name) is PulseResult.Failure) _actionError.tryEmit(Unit)
+        }
     }
 
     fun delete(onDeleted: () -> Unit) {
         val id = _playlistId.value ?: return
         viewModelScope.launch {
-            repository.deletePlaylist(id)
-            onDeleted()
+            when (repository.deletePlaylist(id)) {
+                is PulseResult.Success -> onDeleted()
+                is PulseResult.Failure -> _actionError.tryEmit(Unit)
+            }
         }
     }
 
@@ -182,7 +194,13 @@ fun PlaylistDetailScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val actionErrorMessage = stringResource(R.string.error_action_failed)
+    LaunchedEffect(viewModel) {
+        viewModel.actionError.collect { snackbarHostState.showSnackbar(actionErrorMessage) }
+    }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
             TopAppBar(
@@ -309,6 +327,8 @@ fun PlaylistDetailScreen(
             }
         }
     }
+    SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+    }
 
     if (showRenameDialog) {
         RenamePlaylistDialog(
@@ -338,7 +358,7 @@ fun PlaylistDetailScreen(
 
 @Composable
 private fun RenamePlaylistDialog(initialName: String, onDismiss: () -> Unit, onRename: (String) -> Unit) {
-    var name by remember { mutableStateOf(initialName) }
+    var name by remember(initialName) { mutableStateOf(initialName) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.playlist_rename_title)) },

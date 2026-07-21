@@ -30,6 +30,14 @@ interface MediaRepository {
     /** The error from the most recent [refreshLibrary] call, or null if it last succeeded. */
     fun observeLastSyncError(): Flow<Throwable?>
 
+    /**
+     * Clears the "already synced this process" dedupe flag [refreshLibrary] uses. Call on logout
+     * — this repository is a process-lifetime singleton, so without this a subsequent login in the
+     * same process would see `hasSyncedThisProcess = true` and skip syncing the newly-wiped Room
+     * tables until a manual pull-to-refresh.
+     */
+    fun resetSyncState()
+
     suspend fun songsForAlbum(albumId: String): PulseResult<List<Song>>
 
     suspend fun albumsForArtist(artistId: String): PulseResult<List<Album>>

@@ -34,14 +34,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulsefin.app.BuildConfig
 import com.pulsefin.app.R
+import com.pulsefin.app.ui.components.bouncyClickable
 import com.pulsefin.app.ui.components.pressScale
 import org.koin.androidx.compose.koinViewModel
+
+private const val PULSEFIN_WEBSITE_URL = "https://funnykid7.github.io/PulseFin/"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -93,6 +97,13 @@ fun SettingsScreen(
                         onCheckedChange = viewModel::setDynamicColor,
                     )
                 }
+                item {
+                    SwitchRow(
+                        title = stringResource(R.string.settings_haptics),
+                        checked = settings.hapticsEnabled,
+                        onCheckedChange = viewModel::setHapticsEnabled,
+                    )
+                }
 
                 item { SectionHeader(stringResource(R.string.section_downloads)) }
                 item {
@@ -107,18 +118,16 @@ fun SettingsScreen(
                     )
                 }
                 item {
-                    SwitchRow(
-                        title = stringResource(R.string.settings_prefer_cellular),
-                        checked = settings.preferDownloadsOnCellular,
-                        onCheckedChange = viewModel::setPreferDownloadsOnCellular,
-                    )
-                }
-                item {
-                    OutlinedButton(
-                        onClick = { showClearDownloadsDialog = true },
+                    Row(
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Text(stringResource(R.string.settings_clear_downloads))
+                        OutlinedButton(onClick = viewModel::downloadAllSongs) {
+                            Text(stringResource(R.string.settings_download_all))
+                        }
+                        OutlinedButton(onClick = { showClearDownloadsDialog = true }) {
+                            Text(stringResource(R.string.settings_clear_downloads))
+                        }
                     }
                 }
 
@@ -129,6 +138,17 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                    )
+                }
+                item {
+                    val uriHandler = LocalUriHandler.current
+                    Text(
+                        text = stringResource(R.string.settings_website),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .bouncyClickable(onClick = { uriHandler.openUri(PULSEFIN_WEBSITE_URL) })
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
                     )
                 }
 

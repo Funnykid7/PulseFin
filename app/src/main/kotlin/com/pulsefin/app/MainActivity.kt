@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -22,6 +23,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.pulsefin.app.ui.components.LocalHapticsEnabled
 import com.pulsefin.app.ui.root.PulseFinRoot
 import com.pulsefin.core.data.local.Settings
 import com.pulsefin.core.data.local.SettingsStore
@@ -55,13 +57,15 @@ class MainActivity : ComponentActivity() {
                 insetsController.isAppearanceLightNavigationBars = !settings.darkTheme
             }
             PulseFinTheme(darkTheme = settings.darkTheme, dynamicColor = settings.dynamicColor) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background,
-                ) {
-                    PulseFinRoot()
+                CompositionLocalProvider(LocalHapticsEnabled provides settings.hapticsEnabled) {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background,
+                    ) {
+                        PulseFinRoot()
+                    }
+                    RequestNotificationPermissionOnFirstPlayback()
                 }
-                RequestNotificationPermissionOnFirstPlayback()
             }
         }
     }

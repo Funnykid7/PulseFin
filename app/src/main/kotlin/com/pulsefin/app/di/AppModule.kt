@@ -9,6 +9,7 @@ import com.pulsefin.app.ui.library.AlbumsViewModel
 import com.pulsefin.app.ui.library.ArtistDetailViewModel
 import com.pulsefin.app.ui.library.ArtistsViewModel
 import com.pulsefin.app.ui.login.LoginViewModel
+import com.pulsefin.app.ui.playlist.DownloadsViewModel
 import com.pulsefin.app.ui.playlist.PlaylistDetailViewModel
 import com.pulsefin.app.ui.playlist.PlaylistsViewModel
 import com.pulsefin.app.ui.search.SearchViewModel
@@ -34,5 +35,6 @@ val appModule: Module = module {
     viewModelOf(::SearchViewModel)
     viewModelOf(::PlaylistsViewModel)
     viewModelOf(::PlaylistDetailViewModel)
+    viewModelOf(::DownloadsViewModel)
     viewModelOf(::SettingsViewModel)
 }

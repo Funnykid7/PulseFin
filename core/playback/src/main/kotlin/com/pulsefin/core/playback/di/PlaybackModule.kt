@@ -10,7 +10,6 @@ import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.offline.DownloadManager
 import com.pulsefin.core.common.dispatchers.AppDispatchers
 import com.pulsefin.core.domain.repository.DownloadRepository
-import com.pulsefin.core.domain.repository.DownloadRequirementsProvider
 import com.pulsefin.core.domain.repository.StreamUrlResolver
 import com.pulsefin.core.playback.controller.PlaybackController
 import com.pulsefin.core.playback.download.DownloadRepositoryImpl
@@ -63,7 +62,6 @@ val playbackModule: Module = module {
             androidContext(),
             get(),
             get<StreamUrlResolver>(),
-            get<DownloadRequirementsProvider>(),
             get<AppDispatchers>(),
         )
     }

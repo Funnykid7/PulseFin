@@ -1,13 +1,15 @@
 package com.pulsefin.app.ui.player
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.basicMarquee
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.AnchoredDraggableState
+import androidx.compose.foundation.gestures.DraggableAnchors
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -50,29 +53,35 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.pulsefin.app.R
 import com.pulsefin.app.ui.components.AnimatedPlayPauseIcon
+import com.pulsefin.app.ui.components.HapticEffect
+import com.pulsefin.app.ui.components.LocalHapticsEnabled
 import com.pulsefin.app.ui.components.bouncyClickable
+import com.pulsefin.app.ui.components.performHaptic
 import com.pulsefin.app.ui.components.pressScale
 import com.pulsefin.app.ui.theme.ArtworkTheme
 import com.pulsefin.core.designsystem.theme.RoundedHeroShape
@@ -83,8 +92,11 @@ import com.pulsefin.core.domain.repository.DownloadRepository
 import com.pulsefin.core.domain.repository.MediaRepository
 import com.pulsefin.core.playback.controller.PlaybackController
 import com.pulsefin.core.playback.controller.PlaybackError
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
+
+private enum class DragAnchor { Expanded, Dismissed }
 
 /** Full-screen player: large art, metadata, the wavy seek bar, and transport controls. */
 @Composable
@@ -163,22 +175,39 @@ private fun NowPlayingContent(
     var showSleepSheet by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val view = LocalView.current
+    val hapticsEnabled = LocalHapticsEnabled.current
+
+    // Anchored (not raw-accumulator) drag so the screen visually tracks the finger the whole way
+    // down instead of staying put until a fixed threshold, then teleporting away. Library defaults
+    // (spring snap, velocity-aware fling) give the "let go early but flick fast" case a dismiss too.
+    val dragState = remember { AnchoredDraggableState(initialValue = DragAnchor.Expanded) }
+    LaunchedEffect(dragState) {
+        snapshotFlow { dragState.settledValue }.collect { value ->
+            if (value == DragAnchor.Dismissed) {
+                // Strong: dismissing the full-screen player is a bigger, more consequential
+                // action than a simple tap.
+                view.performHaptic(HapticEffect.Strong, hapticsEnabled)
+                onCollapse()
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .pointerInput(onCollapse) {
-                var totalDrag = 0f
-                detectVerticalDragGestures(
-                    onDragStart = { totalDrag = 0f },
-                    onVerticalDrag = { _, dragAmount -> totalDrag += dragAmount },
-                    onDragEnd = {
-                        if (totalDrag > 220f) {
-                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                            onCollapse()
-                        }
+            .onSizeChanged { size ->
+                dragState.updateAnchors(
+                    DraggableAnchors {
+                        DragAnchor.Expanded at 0f
+                        DragAnchor.Dismissed at size.height.toFloat()
                     },
                 )
             }
+            .offset {
+                val offset = dragState.offset
+                IntOffset(0, if (offset.isNaN()) 0 else offset.roundToInt())
+            }
+            .anchoredDraggable(dragState, Orientation.Vertical)
             // Use stable system-bar insets, not the Scaffold's contentPadding: the bottom bar
             // slides (no height animation) so its padding snaps in one frame at the transition
             // boundary, which would jerk this full-screen layout right as it settles.

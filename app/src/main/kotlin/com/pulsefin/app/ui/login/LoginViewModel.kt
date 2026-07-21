@@ -51,7 +51,9 @@ class LoginViewModel(
     fun submit() {
         val current = uiState
         if (current.isSubmitting) return
-        if (current.serverHost.isBlank() || current.username.isBlank()) {
+        // Password isn't trimmed — whitespace there could be intentional and part of the secret.
+        val username = current.username.trim()
+        if (current.serverHost.isBlank() || username.isBlank()) {
             uiState = current.copy(error = LoginError.Required)
             return
         }
@@ -59,7 +61,7 @@ class LoginViewModel(
         viewModelScope.launch {
             val result = authRepository.loginWithPassword(
                 serverUrl = "${current.serverScheme}://${current.serverHost.trim()}",
-                username = current.username,
+                username = username,
                 password = current.password,
             )
             // On success, the authState flow drives navigation; just clear the spinner.

@@ -40,6 +40,10 @@ suspend fun PersistedQueueItem.toMediaItem(resolver: StreamUrlResolver): MediaIt
     return MediaItem.Builder()
         .setUri(uri)
         .setMediaId(mediaId)
+        // Match the cache key used for normal playback/downloads (the stable media id, not the
+        // resolved URL, which carries a token that can differ run to run) — otherwise a restored
+        // queue item for an already-downloaded song misses the shared Media3 cache entirely.
+        .setCustomCacheKey(mediaId)
         .setMediaMetadata(
             MediaMetadata.Builder()
                 .setTitle(title)

@@ -41,11 +41,20 @@ class HomeViewModel(
             // Spinner only for user-initiated pulls; the silent startup sync shouldn't flash it.
             if (force) isRefreshing = true
             repository.refreshLibrary(force = force)
-            isRefreshing = false
+            // Only this call's own isRefreshing=true should be cleared by it — otherwise a
+            // concurrently-running non-forced sync can clear the spinner for a still-in-progress
+            // forced (pull-to-refresh) one.
+            if (force) isRefreshing = false
         }
     }
 
-    fun onSongClick(index: Int) = viewModelScope.launch { playbackController.play(songs.value, index) }
+    // Resolve by id against the current list at click time rather than trusting a captured list
+    // index — a concurrent library sync that reorders songs between render and click would
+    // otherwise play the wrong track.
+    fun onSongClick(song: Song) = viewModelScope.launch {
+        val index = songs.value.indexOfFirst { it.id.value == song.id.value }
+        if (index >= 0) playbackController.play(songs.value, index)
+    }
 
     fun playNext(song: Song) = viewModelScope.launch { playbackController.playNext(song) }
 

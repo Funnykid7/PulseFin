@@ -2,6 +2,9 @@
 <resources>
     <string name="app_name">PulseFin</string>
 
+    <!-- Shared errors -->
+    <string name="error_action_failed">Something went wrong. Try again.</string>
+
     <!-- Shared actions -->
     <string name="action_cancel">Cancel</string>
     <string name="action_delete">Delete</string>
@@ -66,10 +69,12 @@
     <string name="settings_title">Settings</string>
     <string name="settings_dark_theme">Dark theme</string>
     <string name="settings_dynamic_color">Dynamic color</string>
+    <string name="settings_haptics">Haptic feedback</string>
     <string name="settings_downloaded_size">Downloaded songs use %1$s</string>
-    <string name="settings_prefer_cellular">Prefer downloads on cellular</string>
+    <string name="settings_download_all">Download all songs</string>
     <string name="settings_clear_downloads">Clear all downloads</string>
     <string name="settings_version">PulseFin v%1$s</string>
+    <string name="settings_website">Website</string>
     <string name="settings_clear_downloads_confirm_title">Clear all downloads?</string>
     <string name="settings_clear_downloads_confirm_body">This removes every downloaded song from this device. You can download them again anytime.</string>
     <string name="settings_sign_out_confirm_title">Sign out?</string>
@@ -83,6 +88,7 @@
     <string name="home_sync_error_snackbar">Couldn\'t sync library — showing your last saved copy.</string>
 
     <!-- Playlists -->
+    <string name="playlist_downloads_title">Downloads</string>
     <string name="playlist_new">New playlist</string>
     <string name="playlist_empty">No songs yet.</string>
     <string name="playlists_empty">No playlists yet — tap + to create one.</string>

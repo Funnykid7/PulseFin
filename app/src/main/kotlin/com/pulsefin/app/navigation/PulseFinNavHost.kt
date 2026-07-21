@@ -7,6 +7,9 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -41,6 +44,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.ui.unit.dp
 import com.pulsefin.app.ui.components.LocalNavAnimatedContentScope
 import com.pulsefin.app.ui.components.LocalSharedTransitionScope
@@ -50,6 +54,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -61,6 +66,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -81,6 +87,7 @@ import com.pulsefin.app.ui.player.LyricsScreen
 import com.pulsefin.app.ui.player.MiniPlayer
 import com.pulsefin.app.ui.player.NowPlayingScreen
 import com.pulsefin.app.ui.player.QueueScreen
+import com.pulsefin.app.ui.playlist.DownloadsScreen
 import com.pulsefin.app.ui.playlist.PlaylistDetailScreen
 import com.pulsefin.app.ui.playlist.PlaylistsScreen
 import com.pulsefin.app.ui.search.SearchScreen
@@ -102,6 +109,7 @@ object Routes {
     const val ALBUM_DETAIL = "album/{albumId}?art={art}"
     const val ARTIST_DETAIL = "artist/{artistId}"
     const val PLAYLIST_DETAIL = "playlist/{playlistId}"
+    const val DOWNLOADS = "downloads"
     const val NOWPLAYING = "nowplaying"
     const val QUEUE = "queue"
     const val LYRICS = "lyrics"
@@ -144,9 +152,6 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
         }
     }
     val playbackState by playbackController.state.collectAsStateWithLifecycle()
-    // LargeTopAppBar is designed to pair with exitUntilCollapsed (not enterAlways), which
-    // makes the large title collapse smoothly instead of jumping around.
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     // Surface sync failures once, centrally, instead of every screen swallowing its own
     // refreshLibrary() result — Room keeps serving the last-synced library regardless.
@@ -167,6 +172,14 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
     val isFullScreen = currentRoute == Routes.NOWPLAYING || currentRoute == Routes.QUEUE ||
         currentRoute == Routes.LYRICS
 
+    // LargeTopAppBar is designed to pair with exitUntilCollapsed (not enterAlways), which makes
+    // the large title collapse smoothly instead of jumping around. Each tab gets its own instance
+    // so scrolling one tab's list doesn't leave another tab's app bar mid-collapse when you switch.
+    val scrollBehaviors = remember { mutableStateMapOf<String, TopAppBarScrollBehavior>() }
+    val scrollBehavior = scrollBehaviors.getOrPut(currentTab?.route ?: "") {
+        TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    }
+
     // Extract the current track's Monet scheme once, here, so the mini-player and the now-playing
     // screen share it. Hoisting keeps it alive across the mini-player's mount/unmount and across
     // the expand/collapse transition, so the palette never re-extracts and snaps mid-animation.
@@ -186,7 +199,7 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                     actions = {
                         val searchInteraction = remember { MutableInteractionSource() }
                         FilledTonalIconButton(
-                            onClick = { navController.navigate(Routes.SEARCH) },
+                            onClick = { navController.navigate(Routes.SEARCH) { launchSingleTop = true } },
                             modifier = Modifier.pressScale(searchInteraction),
                             shape = searchShape(),
                             interactionSource = searchInteraction,
@@ -196,7 +209,7 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                         Spacer(Modifier.width(8.dp))
                         val settingsInteraction = remember { MutableInteractionSource() }
                         IconButton(
-                            onClick = { navController.navigate(Routes.SETTINGS) },
+                            onClick = { navController.navigate(Routes.SETTINGS) { launchSingleTop = true } },
                             modifier = Modifier.pressScale(settingsInteraction, pressedScale = 0.92f),
                             interactionSource = settingsInteraction,
                         ) {
@@ -221,7 +234,7 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                         MiniPlayer(
                             state = playbackState,
                             onTogglePlayPause = playbackController::togglePlayPause,
-                            onClick = { navController.navigate(Routes.NOWPLAYING) },
+                            onClick = { navController.navigate(Routes.NOWPLAYING) { launchSingleTop = true } },
                             playbackController = playbackController,
                         )
                     }
@@ -287,6 +300,7 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                         PlaylistsScreen(
                             contentPadding = innerPadding,
                             onPlaylistClick = { navController.navigate(Routes.playlistDetail(it)) },
+                            onDownloadsClick = { navController.navigate(Routes.DOWNLOADS) { launchSingleTop = true } },
                         )
                     }
                     composable(
@@ -315,7 +329,7 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                     composable(
                         route = Routes.ARTIST_DETAIL,
                         arguments = listOf(navArgument("artistId") { type = NavType.StringType }),
-                        enterTransition = { slideInHorizontally { it / 3 } + fadeIn() },
+                        enterTransition = { slideInHorizontally(mildSlideSpring) { it / 3 } + fadeIn() },
                         popExitTransition = { slideOutHorizontally { it / 3 } + fadeOut() },
                     ) { entry ->
                         CompositionLocalProvider(LocalNavAnimatedContentScope provides this) {
@@ -330,7 +344,7 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                     composable(
                         route = Routes.PLAYLIST_DETAIL,
                         arguments = listOf(navArgument("playlistId") { type = NavType.StringType }),
-                        enterTransition = { slideInHorizontally { it / 3 } + fadeIn() },
+                        enterTransition = { slideInHorizontally(mildSlideSpring) { it / 3 } + fadeIn() },
                         popExitTransition = { slideOutHorizontally { it / 3 } + fadeOut() },
                     ) { entry ->
                         PlaylistDetailScreen(
@@ -341,26 +355,43 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                         )
                     }
                     composable(
+                        route = Routes.DOWNLOADS,
+                        enterTransition = { slideInHorizontally(mildSlideSpring) { it / 3 } + fadeIn() },
+                        popExitTransition = { slideOutHorizontally { it / 3 } + fadeOut() },
+                    ) {
+                        DownloadsScreen(
+                            contentPadding = innerPadding,
+                            currentMediaId = playbackState.currentMediaId,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable(
                         Routes.NOWPLAYING,
-                        enterTransition = { slideInVertically(initialOffsetY = { it }) + fadeIn() },
+                        enterTransition = {
+                            slideInVertically(mildSlideSpring, initialOffsetY = { it }) + fadeIn()
+                        },
                         popExitTransition = { slideOutVertically(targetOffsetY = { it }) + fadeOut() },
                     ) {
                         NowPlayingScreen(
                             onCollapse = { navController.popBackStack() },
-                            onOpenQueue = { navController.navigate(Routes.QUEUE) },
-                            onOpenLyrics = { navController.navigate(Routes.LYRICS) },
+                            onOpenQueue = { navController.navigate(Routes.QUEUE) { launchSingleTop = true } },
+                            onOpenLyrics = { navController.navigate(Routes.LYRICS) { launchSingleTop = true } },
                         )
                     }
                     composable(
                         Routes.LYRICS,
-                        enterTransition = { slideInVertically(initialOffsetY = { it }) + fadeIn() },
+                        enterTransition = {
+                            slideInVertically(mildSlideSpring, initialOffsetY = { it }) + fadeIn()
+                        },
                         popExitTransition = { slideOutVertically(targetOffsetY = { it }) + fadeOut() },
                     ) {
                         LyricsScreen(onBack = { navController.popBackStack() })
                     }
                     composable(
                         Routes.QUEUE,
-                        enterTransition = { slideInVertically(initialOffsetY = { it }) + fadeIn() },
+                        enterTransition = {
+                            slideInVertically(mildSlideSpring, initialOffsetY = { it }) + fadeIn()
+                        },
                         popExitTransition = { slideOutVertically(targetOffsetY = { it }) + fadeOut() },
                     ) {
                         QueueScreen(
@@ -385,8 +416,15 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                     }
                     composable(
                         Routes.SETTINGS,
-                        enterTransition = { slideInHorizontally { it / 3 } + fadeIn() },
-                        popExitTransition = { slideOutHorizontally { it / 3 } + fadeOut() },
+                        // A steeper slide + slight scale-up (vs. the content drill-downs' gentle
+                        // 1/3-width slide) so opening a utility panel reads differently from
+                        // opening a piece of content.
+                        enterTransition = {
+                            slideInHorizontally(mildSlideSpring) { it / 2 } +
+                                fadeIn() +
+                                scaleIn(initialScale = 0.94f, animationSpec = mildScaleSpring)
+                        },
+                        popExitTransition = { slideOutHorizontally { it / 2 } + fadeOut() },
                     ) {
                         SettingsScreen(
                             contentPadding = innerPadding,
@@ -400,8 +438,15 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
     }
 }
 
+// A mild spring (slight overshoot, not floaty) for arriving content — bounce belongs to
+// something settling into place, not to something leaving, so exits stay plain/snappy.
+private val mildSlideSpring: FiniteAnimationSpec<IntOffset> =
+    spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)
+private val mildScaleSpring: FiniteAnimationSpec<Float> =
+    spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)
+
 // Tab switches use a shared fade-through so Songs/Albums/Artists glide instead of hard-cutting.
 private val tabEnter: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition =
-    { fadeIn() + scaleIn(initialScale = 0.96f) }
+    { fadeIn() + scaleIn(initialScale = 0.96f, animationSpec = mildScaleSpring) }
 private val tabExit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition =
     { fadeOut() }

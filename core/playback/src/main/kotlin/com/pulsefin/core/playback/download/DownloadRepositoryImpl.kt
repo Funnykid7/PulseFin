@@ -12,7 +12,6 @@ import com.pulsefin.core.domain.model.DownloadState
 import com.pulsefin.core.domain.model.Song
 import com.pulsefin.core.domain.model.SongDownload
 import com.pulsefin.core.domain.repository.DownloadRepository
-import com.pulsefin.core.domain.repository.DownloadRequirementsProvider
 import com.pulsefin.core.domain.repository.StreamUrlResolver
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
@@ -20,27 +19,47 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 
 class DownloadRepositoryImpl(
     private val context: Context,
     private val downloadManager: DownloadManager,
     private val streamUrlResolver: StreamUrlResolver,
-    private val downloadRequirementsProvider: DownloadRequirementsProvider,
     private val dispatchers: AppDispatchers,
 ) : DownloadRepository {
 
     private val _downloads = MutableStateFlow<Map<String, SongDownload>>(emptyMap())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
+    // Ids the listener has already reported on. The cold-start disk-index seed below runs async
+    // and can resolve after a live listener update for the same id — without this, the seed's now-
+    // stale snapshot would overwrite the fresher listener-driven state (last-write-wins by finish
+    // order, not by data freshness). Registering the listener first (synchronously, before the seed
+    // even starts) plus this skip-if-already-seen check makes the merge safe in either order.
+    private val listenerUpdatedIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
     init {
+        // Downloads require some network connection, but the user no longer chooses whether
+        // cellular counts — a downloaded song is always preferred over streaming during normal
+        // playback anyway (see PlaybackController's shared cache), so this is just "has network".
+        downloadManager.requirements = Requirements(Requirements.NETWORK)
+        downloadManager.addListener(object : DownloadManager.Listener {
+            override fun onDownloadChanged(dm: DownloadManager, download: Download, finalException: Exception?) {
+                listenerUpdatedIds += download.request.id
+                updateFrom(download)
+            }
+            override fun onDownloadRemoved(dm: DownloadManager, download: Download) {
+                listenerUpdatedIds += download.request.id
+                _downloads.update { it - download.request.id }
+            }
+        })
         // Media3's own index survives process death; seed from it so cold-start UI is correct
         // even before any DownloadManager.Listener callback fires. Use downloadIndex.getDownloads()
         // (not currentDownloads, which excludes COMPLETED/FAILED) so terminal states are seeded too.
@@ -53,27 +72,13 @@ class DownloadRepositoryImpl(
                 try {
                     downloadManager.downloadIndex.getDownloads().use { cursor ->
                         while (cursor.moveToNext()) {
-                            updateFrom(cursor.download)
+                            val download = cursor.download
+                            if (download.request.id !in listenerUpdatedIds) updateFrom(download)
                         }
                     }
                 } catch (e: IOException) {
-                    // Ignore; _downloads stays empty and will be populated by the listener below.
+                    // Ignore; _downloads stays empty and will be populated by the listener above.
                 }
-            }
-        }
-        downloadManager.addListener(object : DownloadManager.Listener {
-            override fun onDownloadChanged(dm: DownloadManager, download: Download, finalException: Exception?) {
-                updateFrom(download)
-            }
-            override fun onDownloadRemoved(dm: DownloadManager, download: Download) {
-                _downloads.update { it - download.request.id }
-            }
-        })
-        scope.launch {
-            downloadRequirementsProvider.observePreferDownloadsOnCellular().collect { allow ->
-                downloadManager.requirements = Requirements(
-                    if (allow) Requirements.NETWORK else Requirements.NETWORK_UNMETERED
-                )
             }
         }
     }
@@ -90,17 +95,19 @@ class DownloadRepositoryImpl(
             // session-token refresh (which changes the resolved URI) doesn't orphan this download.
             .setCustomCacheKey(song.id.value)
             .build()
-        DownloadService.sendAddDownload(context, PulseFinDownloadService::class.java, request, false)
+        DownloadService.sendAddDownload(context, PulseFinDownloadService::class.java, request, true)
     }
 
     override suspend fun downloadAll(songs: List<Song>) {
-        coroutineScope {
-            songs.map { async { download(it) } }.awaitAll()
+        // supervisorScope + per-song runCatching so one song's resolver/service failure doesn't
+        // cancel the sibling downloads still in flight.
+        supervisorScope {
+            songs.map { song -> async { runCatching { download(song) } } }.awaitAll()
         }
     }
 
     override suspend fun remove(songId: String) {
-        DownloadService.sendRemoveDownload(context, PulseFinDownloadService::class.java, songId, false)
+        DownloadService.sendRemoveDownload(context, PulseFinDownloadService::class.java, songId, true)
     }
 
     override suspend fun removeAll(songIds: List<String>) {
@@ -108,7 +115,19 @@ class DownloadRepositoryImpl(
     }
 
     override suspend fun clearAllDownloads() {
-        removeAll(_downloads.value.keys.toList())
+        // Read the on-disk Media3 index directly rather than the in-memory _downloads snapshot,
+        // which may not yet be fully seeded (or may be missing entries the listener hasn't fired
+        // for yet) — clearing against a stale/incomplete snapshot would silently leave files on disk.
+        val ids = withContext(dispatchers.io) {
+            try {
+                downloadManager.downloadIndex.getDownloads().use { cursor ->
+                    buildList { while (cursor.moveToNext()) add(cursor.download.request.id) }
+                }
+            } catch (e: IOException) {
+                _downloads.value.keys.toList()
+            }
+        }
+        removeAll(ids)
     }
 
     private fun updateFrom(download: Download) {

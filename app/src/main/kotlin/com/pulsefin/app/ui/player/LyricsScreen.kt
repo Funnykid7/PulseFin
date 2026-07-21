@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import android.view.HapticFeedbackConstants
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,6 +38,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulsefin.app.R
+import com.pulsefin.app.ui.components.HapticEffect
+import com.pulsefin.app.ui.components.LocalHapticsEnabled
+import com.pulsefin.app.ui.components.performHaptic
 import com.pulsefin.app.ui.components.pressScale
 import com.pulsefin.app.ui.theme.ArtworkTheme
 import com.pulsefin.core.common.result.PulseResult
@@ -92,6 +94,7 @@ fun LyricsScreen(
                 val synced = current?.isSynced == true
                 if (synced) {
                     val view = LocalView.current
+                    val hapticsEnabled = LocalHapticsEnabled.current
                     SingleChoiceSegmentedButtonRow(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -100,7 +103,7 @@ fun LyricsScreen(
                         SegmentedButton(
                             selected = mode == LyricsMode.Synced,
                             onClick = {
-                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                view.performHaptic(HapticEffect.Light, hapticsEnabled)
                                 mode = LyricsMode.Synced
                             },
                             shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
@@ -108,7 +111,7 @@ fun LyricsScreen(
                         SegmentedButton(
                             selected = mode == LyricsMode.Static,
                             onClick = {
-                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                view.performHaptic(HapticEffect.Light, hapticsEnabled)
                                 mode = LyricsMode.Static
                             },
                             shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),

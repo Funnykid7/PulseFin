@@ -1,5 +1,7 @@
 package com.pulsefin.app.ui.components
 
+import android.os.Build
+import android.view.View
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
@@ -33,6 +35,32 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalView
 
+/** Whether the user has haptics enabled (Settings). Provided at the app root; defaults on. */
+val LocalHapticsEnabled = staticCompositionLocalOf { true }
+
+/**
+ * Named haptic intents so call sites express *why* they're buzzing rather than picking a raw
+ * [HapticFeedbackConstants] value — [Light] for simple taps, [Medium] for a noticeable
+ * start-of-gesture/threshold tick, [Strong] for a bigger, more consequential confirmation.
+ */
+enum class HapticEffect { Light, Medium, Strong }
+
+/** Fires [effect] if haptics are enabled; use with [LocalHapticsEnabled]. */
+fun View.performHaptic(effect: HapticEffect, enabled: Boolean) {
+    if (!enabled) return
+    val constant = when (effect) {
+        HapticEffect.Light -> HapticFeedbackConstants.KEYBOARD_TAP
+        // SEGMENT_TICK is API 34+; guard it since this app's minSdk is 31.
+        HapticEffect.Medium -> if (Build.VERSION.SDK_INT >= 34) {
+            HapticFeedbackConstants.SEGMENT_TICK
+        } else {
+            HapticFeedbackConstants.KEYBOARD_TAP
+        }
+        HapticEffect.Strong -> HapticFeedbackConstants.CONFIRM
+    }
+    performHapticFeedback(constant)
+}
+
 /**
  * Springy press-scale: the element dips while held and bounces back on release. Reads the
  * button's own [InteractionSource] so the host keeps its onClick, ripple, and semantics — we
@@ -43,6 +71,7 @@ fun Modifier.pressScale(
     pressedScale: Float = 0.86f,
 ): Modifier = composed {
     val view = LocalView.current
+    val hapticsEnabled = LocalHapticsEnabled.current
     // A light tactile tick the instant a press begins. Because bouncyClickable also routes through
     // pressScale, this gives every button, row, and card in the app consistent tap haptics.
     //
@@ -52,10 +81,10 @@ fun Modifier.pressScale(
     // can get delayed enough frames that the haptic silently drops while onClick — unaffected by
     // recomposition scheduling — still fires normally. Reacting to the Press event directly removes
     // that hop.
-    LaunchedEffect(interactionSource) {
+    LaunchedEffect(interactionSource, hapticsEnabled) {
         interactionSource.interactions.collect { interaction ->
             if (interaction is PressInteraction.Press) {
-                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                view.performHaptic(HapticEffect.Light, hapticsEnabled)
             }
         }
     }

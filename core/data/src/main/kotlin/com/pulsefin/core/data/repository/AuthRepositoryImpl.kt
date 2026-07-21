@@ -7,6 +7,7 @@ import com.pulsefin.core.data.local.Session
 import com.pulsefin.core.data.local.SessionStore
 import com.pulsefin.core.domain.repository.AuthRepository
 import com.pulsefin.core.domain.repository.AuthState
+import com.pulsefin.core.domain.repository.MediaRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -24,6 +25,7 @@ class AuthRepositoryImpl(
     private val sessionStore: SessionStore,
     private val dispatchers: AppDispatchers,
     private val database: PulseFinDatabase,
+    private val mediaRepository: MediaRepository,
 ) : AuthRepository {
 
     override val authState: Flow<AuthState> = sessionStore.session.map { session ->
@@ -88,6 +90,7 @@ class AuthRepositoryImpl(
     override suspend fun logout() {
         sessionStore.clear()
         database.clearAll()
+        mediaRepository.resetSyncState()
     }
 }
 

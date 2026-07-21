@@ -74,8 +74,12 @@ class PlaybackService : MediaSessionService() {
             val currentMediaId = restored.items.getOrNull(restored.currentIndex)?.mediaId
             val items = restored.items.mapNotNull { it.toMediaItem(streamUrlResolver) }
             if (items.isEmpty()) return@launch
-            val startIndex = items.indexOfFirst { it.mediaId == currentMediaId }.takeIf { it >= 0 } ?: 0
-            player.setMediaItems(items, startIndex, restored.positionMs)
+            val startIndex = items.indexOfFirst { it.mediaId == currentMediaId }.takeIf { it >= 0 }
+            // If the previously-current track itself failed to resolve, startIndex falls back to
+            // 0 — a different song. Its saved position belongs to the original track, not this
+            // fallback one, so don't apply it; start the fallback track from the beginning.
+            val resumePositionMs = if (startIndex != null) restored.positionMs else C.TIME_UNSET
+            player.setMediaItems(items, startIndex ?: 0, resumePositionMs)
             player.prepare()
         }
     }

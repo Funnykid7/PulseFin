@@ -61,7 +61,10 @@ class AlbumsViewModel(private val repository: MediaRepository) : ViewModel() {
             // Spinner only for user-initiated pulls; the silent startup sync shouldn't flash it.
             if (force) isRefreshing = true
             repository.refreshLibrary(force = force)
-            isRefreshing = false
+            // Only this call's own isRefreshing=true should be cleared by it — otherwise a
+            // concurrently-running non-forced sync can clear the spinner for a still-in-progress
+            // forced (pull-to-refresh) one.
+            if (force) isRefreshing = false
         }
     }
 }
@@ -127,7 +130,9 @@ private fun AlbumCard(album: Album, onClick: () -> Unit, modifier: Modifier = Mo
         modifier = modifier.bouncyClickable(pressedScale = 0.95f, onClick = onClick),
     ) {
         AsyncImage(
-            model = sizedArtUrl(album.artworkUrl, 180),
+            // 480, not 180: this fills a full 2-column grid tile, which at 2-3x density is well
+            // above 180px — a flat 180 request upscaled to fill the tile looked blurred.
+            model = sizedArtUrl(album.artworkUrl, 480),
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier

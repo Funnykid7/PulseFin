@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -90,16 +90,16 @@ fun HomeScreen(
                     }
                 }
             } else {
-                itemsIndexed(
+                items(
                     songs,
-                    key = { _, song -> song.id.value },
-                    contentType = { _, _ -> "song" },
-                ) { index, song ->
+                    key = { song -> song.id.value },
+                    contentType = { "song" },
+                ) { song ->
                     SongRow(
                         song = song,
                         isPlaying = song.id.value == currentMediaId,
                         downloadState = downloadStates[song.id.value] ?: DownloadState.NONE,
-                        onClick = { viewModel.onSongClick(index) },
+                        onClick = { viewModel.onSongClick(song) },
                         onPlayNext = { viewModel.playNext(song) },
                         onAddToQueue = { viewModel.addToQueue(song) },
                         onAddToPlaylist = { addToPlaylistSongId = song.id.value },

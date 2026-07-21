@@ -15,7 +15,7 @@ private val Context.dataStore by preferencesDataStore(name = "pulsefin_settings"
 data class Settings(
     val darkTheme: Boolean = true,
     val dynamicColor: Boolean = true,
-    val preferDownloadsOnCellular: Boolean = true,
+    val hapticsEnabled: Boolean = true,
 )
 
 /** Persists user-facing app settings in a plain (non-encrypted) DataStore — nothing here is sensitive. */
@@ -24,7 +24,7 @@ class SettingsStore(context: Context, private val dispatchers: AppDispatchers) {
     private object Keys {
         val DARK_THEME = booleanPreferencesKey("dark_theme")
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
-        val PREFER_DOWNLOADS_ON_CELLULAR = booleanPreferencesKey("prefer_downloads_on_cellular")
+        val HAPTICS_ENABLED = booleanPreferencesKey("haptics_enabled")
     }
 
     private val dataStore = context.dataStore
@@ -34,8 +34,7 @@ class SettingsStore(context: Context, private val dispatchers: AppDispatchers) {
         Settings(
             darkTheme = prefs[Keys.DARK_THEME] ?: defaults.darkTheme,
             dynamicColor = prefs[Keys.DYNAMIC_COLOR] ?: defaults.dynamicColor,
-            preferDownloadsOnCellular = prefs[Keys.PREFER_DOWNLOADS_ON_CELLULAR]
-                ?: defaults.preferDownloadsOnCellular,
+            hapticsEnabled = prefs[Keys.HAPTICS_ENABLED] ?: defaults.hapticsEnabled,
         )
     }
 
@@ -47,7 +46,7 @@ class SettingsStore(context: Context, private val dispatchers: AppDispatchers) {
         dataStore.edit { it[Keys.DYNAMIC_COLOR] = enabled }
     }
 
-    suspend fun setPreferDownloadsOnCellular(enabled: Boolean): Unit = withContext(dispatchers.io) {
-        dataStore.edit { it[Keys.PREFER_DOWNLOADS_ON_CELLULAR] = enabled }
+    suspend fun setHapticsEnabled(enabled: Boolean): Unit = withContext(dispatchers.io) {
+        dataStore.edit { it[Keys.HAPTICS_ENABLED] = enabled }
     }
 }

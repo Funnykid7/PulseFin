@@ -1,7 +1,5 @@
 package com.pulsefin.app.ui.player
 
-import android.os.Build
-import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +14,7 @@ import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,6 +24,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import com.pulsefin.app.ui.components.HapticEffect
+import com.pulsefin.app.ui.components.LocalHapticsEnabled
+import com.pulsefin.app.ui.components.performHaptic
 
 /**
  * Material 3 Expressive seek bar: a determinate [LinearWavyProgressIndicator] whose track waves
@@ -40,6 +42,9 @@ fun WavySeekBar(
     modifier: Modifier = Modifier,
 ) {
     var scrub by remember { mutableStateOf<Float?>(null) }
+    // A track change mid-drag restarts the pointerInput(durationMs) blocks below without firing
+    // onDragEnd/onDragCancel, which would otherwise leave scrub stuck at the old track's position.
+    LaunchedEffect(durationMs) { scrub = null }
     val playbackFraction = if (durationMs > 0) {
         (positionMs.toFloat() / durationMs).coerceIn(0f, 1f)
     } else {
@@ -47,6 +52,7 @@ fun WavySeekBar(
     }
     val fraction = scrub ?: playbackFraction
     val view = LocalView.current
+    val hapticsEnabled = LocalHapticsEnabled.current
 
     Column(modifier = modifier.fillMaxWidth()) {
         Box(
@@ -56,7 +62,7 @@ fun WavySeekBar(
                 .pointerInput(durationMs) {
                     detectTapGestures { offset ->
                         if (durationMs > 0) {
-                            performSegmentTick(view)
+                            view.performHaptic(HapticEffect.Medium, hapticsEnabled)
                             val f = (offset.x / size.width).coerceIn(0f, 1f)
                             onSeek((f * durationMs).toLong())
                         }
@@ -65,7 +71,7 @@ fun WavySeekBar(
                 .pointerInput(durationMs) {
                     detectHorizontalDragGestures(
                         onDragStart = { offset ->
-                            performSegmentTick(view)
+                            view.performHaptic(HapticEffect.Medium, hapticsEnabled)
                             scrub = (offset.x / size.width).coerceIn(0f, 1f)
                         },
                         onHorizontalDrag = { change, _ ->
@@ -106,13 +112,6 @@ fun WavySeekBar(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-    }
-}
-
-/** SEGMENT_TICK is API 34+; guard it since this app's minSdk is 31. */
-private fun performSegmentTick(view: android.view.View) {
-    if (Build.VERSION.SDK_INT >= 34) {
-        view.performHapticFeedback(HapticFeedbackConstants.SEGMENT_TICK)
     }
 }
 

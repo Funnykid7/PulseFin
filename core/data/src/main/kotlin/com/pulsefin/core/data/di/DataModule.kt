@@ -8,7 +8,6 @@ import com.pulsefin.core.data.jellyfin.StreamUrlResolverImpl
 import com.pulsefin.core.data.local.AlbumDao
 import com.pulsefin.core.data.local.ArtistDao
 import com.pulsefin.core.data.local.DownloadDao
-import com.pulsefin.core.data.local.DownloadRequirementsProviderImpl
 import com.pulsefin.core.data.local.PlaylistDao
 import com.pulsefin.core.data.local.PulseFinDatabase
 import com.pulsefin.core.data.local.RecentSearchDao
@@ -18,7 +17,6 @@ import com.pulsefin.core.data.local.SongDao
 import com.pulsefin.core.data.repository.AuthRepositoryImpl
 import com.pulsefin.core.data.repository.MediaRepositoryImpl
 import com.pulsefin.core.domain.repository.AuthRepository
-import com.pulsefin.core.domain.repository.DownloadRequirementsProvider
 import com.pulsefin.core.domain.repository.MediaRepository
 import com.pulsefin.core.domain.repository.StreamUrlResolver
 import org.jellyfin.sdk.Jellyfin
@@ -46,10 +44,9 @@ val dataModule: Module = module {
 
     single { SessionStore(androidContext(), get()) }
     single { SettingsStore(androidContext(), get()) }
-    single<DownloadRequirementsProvider> { DownloadRequirementsProviderImpl(get()) }
     single { JellyfinApiProvider(get(), get()) }
 
-    single<AuthRepository> { AuthRepositoryImpl(get(), get(), get(), get()) }
-    single<MediaRepository> { MediaRepositoryImpl(get(), get(), get(), get(), get(), get(), get()) }
+    single<AuthRepository> { AuthRepositoryImpl(get(), get(), get(), get(), get()) }
+    single<MediaRepository> { MediaRepositoryImpl(get(), get(), get(), get(), get(), get(), get(), get()) }
     single<StreamUrlResolver> { StreamUrlResolverImpl(get()) }
 }

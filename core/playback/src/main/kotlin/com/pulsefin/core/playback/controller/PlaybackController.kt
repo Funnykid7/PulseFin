@@ -153,12 +153,20 @@ class PlaybackController(
         ).setListener(controllerListener).buildAsync().also { controllerFuture = it }
 
         future.addListener({
-            val ready = future.get()
-            controller = ready
-            ready.addListener(listener)
-            updateState(ready)
-            startTicking()
-            action(ready)
+            try {
+                val ready = future.get()
+                controller = ready
+                ready.addListener(listener)
+                updateState(ready)
+                startTicking()
+                action(ready)
+            } catch (e: Exception) {
+                // The connection itself failed (session rejected us, background-start
+                // restriction, etc). Drop the future so the next call rebuilds a fresh one
+                // instead of forever replaying this same failure.
+                controllerFuture = null
+                _state.value = _state.value.copy(error = PlaybackError.Unknown)
+            }
         }, context.mainExecutor)
     }
 
@@ -170,13 +178,24 @@ class PlaybackController(
      */
     suspend fun retry() {
         if (_state.value.error == PlaybackError.Auth) {
-            val current = controller ?: return
-            val refreshed = (0 until current.mediaItemCount).mapNotNull { i ->
-                val item = current.getMediaItemAt(i)
-                streamUrlResolver.resolveStreamUrl(item.mediaId)?.let { item.withRefreshedUri(it) }
+            val current = controller
+            if (current != null) {
+                // Capture the currently-playing item's id/position before resolution: a dropped
+                // (unresolvable) earlier item would otherwise shift every later index left,
+                // silently resuming playback on the wrong track.
+                val currentMediaId = current.currentMediaItem?.mediaId
+                val currentPositionMs = current.currentPosition.coerceAtLeast(0L)
+                val refreshed = (0 until current.mediaItemCount).mapNotNull { i ->
+                    val item = current.getMediaItemAt(i)
+                    streamUrlResolver.resolveStreamUrl(item.mediaId)?.let { item.withRefreshedUri(it) }
+                }
+                if (refreshed.isNotEmpty()) {
+                    val resolvedIndex = refreshed.indexOfFirst { it.mediaId == currentMediaId }
+                        .takeIf { it >= 0 } ?: 0
+                    withController { it.replaceMediaItems(0, current.mediaItemCount, refreshed) }
+                    withController { it.seekTo(resolvedIndex, currentPositionMs) }
+                }
             }
-            if (refreshed.isEmpty()) return
-            withController { it.replaceMediaItems(0, current.mediaItemCount, refreshed) }
         }
         withController { controller ->
             controller.prepare()

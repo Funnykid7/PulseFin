@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulsefin.app.R
 import com.pulsefin.app.ui.components.bouncyClickable
+import com.pulsefin.core.common.result.PulseResult
 import com.pulsefin.core.domain.repository.MediaRepository
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -44,6 +45,8 @@ fun AddToPlaylistSheet(
     // Guards against a fast double-tap firing addToPlaylist/createPlaylist twice for the same
     // request before the in-flight call dismisses this sheet.
     var isSubmitting by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val actionErrorMessage = stringResource(R.string.error_action_failed)
     val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
@@ -53,6 +56,14 @@ fun AddToPlaylistSheet(
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
         )
+        errorMessage?.let {
+            Text(
+                text = it,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+            )
+        }
         ListItem(
             headlineContent = { Text(stringResource(R.string.playlist_new)) },
             leadingContent = { Icon(Icons.Filled.Add, contentDescription = null) },
@@ -69,9 +80,15 @@ fun AddToPlaylistSheet(
                         // composition, which would cancel addToPlaylist() mid-flight if dismissal
                         // happened first — await it, then dismiss.
                         isSubmitting = true
+                        errorMessage = null
                         scope.launch {
-                            repository.addToPlaylist(playlist.id.value, listOf(songId))
-                            onDismiss()
+                            when (repository.addToPlaylist(playlist.id.value, listOf(songId))) {
+                                is PulseResult.Success -> onDismiss()
+                                is PulseResult.Failure -> {
+                                    isSubmitting = false
+                                    errorMessage = actionErrorMessage
+                                }
+                            }
                         }
                     },
                 ),
@@ -86,9 +103,15 @@ fun AddToPlaylistSheet(
             onCreate = { name ->
                 showCreateDialog = false
                 isSubmitting = true
+                errorMessage = null
                 scope.launch {
-                    repository.createPlaylist(name, listOf(songId))
-                    onDismiss()
+                    when (repository.createPlaylist(name, listOf(songId))) {
+                        is PulseResult.Success -> onDismiss()
+                        is PulseResult.Failure -> {
+                            isSubmitting = false
+                            errorMessage = actionErrorMessage
+                        }
+                    }
                 }
             },
         )

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -184,6 +185,12 @@ fun SearchScreen(
                     .fillMaxWidth()
                     .focusRequester(focusRequester),
             )
+        }
+
+        // Otherwise the previous query's (now stale) results sit on screen looking authoritative
+        // for the full debounce + network round trip while a new search is in flight.
+        if (state.isSearching) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
 
         LazyColumn(

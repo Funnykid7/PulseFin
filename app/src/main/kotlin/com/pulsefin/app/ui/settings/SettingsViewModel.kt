@@ -6,8 +6,10 @@ import com.pulsefin.core.data.local.Settings
 import com.pulsefin.core.data.local.SettingsStore
 import com.pulsefin.core.domain.repository.AuthRepository
 import com.pulsefin.core.domain.repository.DownloadRepository
+import com.pulsefin.core.domain.repository.MediaRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -15,6 +17,7 @@ class SettingsViewModel(
     private val settingsStore: SettingsStore,
     private val downloadRepository: DownloadRepository,
     private val authRepository: AuthRepository,
+    private val mediaRepository: MediaRepository,
 ) : ViewModel() {
 
     val settings: StateFlow<Settings> = settingsStore.settings
@@ -27,10 +30,13 @@ class SettingsViewModel(
 
     fun setDynamicColor(enabled: Boolean) = viewModelScope.launch { settingsStore.setDynamicColor(enabled) }
 
-    fun setPreferDownloadsOnCellular(enabled: Boolean) =
-        viewModelScope.launch { settingsStore.setPreferDownloadsOnCellular(enabled) }
+    fun setHapticsEnabled(enabled: Boolean) = viewModelScope.launch { settingsStore.setHapticsEnabled(enabled) }
 
     fun clearAllDownloads() = viewModelScope.launch { downloadRepository.clearAllDownloads() }
+
+    fun downloadAllSongs() = viewModelScope.launch {
+        downloadRepository.downloadAll(mediaRepository.observeSongs().first())
+    }
 
     fun signOut() = viewModelScope.launch {
         // Clear Media3 downloads/cache (:core:playback) alongside the session + Room wipe

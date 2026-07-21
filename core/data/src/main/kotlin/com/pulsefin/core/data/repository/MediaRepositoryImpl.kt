@@ -2,6 +2,7 @@ package com.pulsefin.core.data.repository
 
 import com.pulsefin.core.common.dispatchers.AppDispatchers
 import com.pulsefin.core.common.result.PulseResult
+import androidx.room.withTransaction
 import com.pulsefin.core.data.jellyfin.JellyfinApiProvider
 import com.pulsefin.core.data.jellyfin.ensureApiKey
 import com.pulsefin.core.data.local.AlbumDao
@@ -10,6 +11,7 @@ import com.pulsefin.core.data.local.ArtistDao
 import com.pulsefin.core.data.local.ArtistEntity
 import com.pulsefin.core.data.local.PlaylistDao
 import com.pulsefin.core.data.local.PlaylistEntity
+import com.pulsefin.core.data.local.PulseFinDatabase
 import com.pulsefin.core.data.local.RecentSearchDao
 import com.pulsefin.core.data.local.RecentSearchEntity
 import com.pulsefin.core.data.local.SongDao
@@ -74,15 +76,21 @@ class MediaRepositoryImpl(
     private val artistDao: ArtistDao,
     private val recentSearchDao: RecentSearchDao,
     private val playlistDao: PlaylistDao,
+    private val database: PulseFinDatabase,
 ) : MediaRepository {
 
     private val refreshMutex = Mutex()
+    private val favoriteMutexes = java.util.concurrent.ConcurrentHashMap<String, Mutex>()
 
     @Volatile
     private var hasSyncedThisProcess = false
 
     private val _lastSyncError = MutableStateFlow<Throwable?>(null)
     override fun observeLastSyncError(): Flow<Throwable?> = _lastSyncError.asStateFlow()
+
+    override fun resetSyncState() {
+        hasSyncedThisProcess = false
+    }
 
     override fun observeSongs(): Flow<List<Song>> =
         songDao.observeAll().map { rows -> rows.map { it.toSong() } }
@@ -109,11 +117,19 @@ class MediaRepositoryImpl(
                     val playlistsDeferred = async {
                         fetchAllItems(api, BaseItemKind.PLAYLIST).map { async { it.toPlaylist(api) } }.awaitAll()
                     }
-                    // Atomic swaps -> observers see a single emission, no empty flash.
-                    songDao.replaceAll(songsDeferred.await().map { it.toEntity() })
-                    albumDao.replaceAll(albumsDeferred.await().map { it.toEntity() })
-                    artistDao.replaceAll(artistsDeferred.await().map { it.toEntity() })
-                    playlistDao.replaceAll(playlistsDeferred.await().map { it.toEntity() })
+                    val songs = songsDeferred.await().map { it.toEntity() }
+                    val albums = albumsDeferred.await().map { it.toEntity() }
+                    val artists = artistsDeferred.await().map { it.toEntity() }
+                    val playlists = playlistsDeferred.await().map { it.toEntity() }
+                    // One outer transaction spanning all four tables — each replaceAll is itself
+                    // @Transaction, but without this wrapper a crash/process-death partway through
+                    // could leave Room with a mix of freshly-synced and stale tables.
+                    database.withTransaction {
+                        songDao.replaceAll(songs)
+                        albumDao.replaceAll(albums)
+                        artistDao.replaceAll(artists)
+                        playlistDao.replaceAll(playlists)
+                    }
                 }
                 hasSyncedThisProcess = true
             }
@@ -180,18 +196,23 @@ class MediaRepositoryImpl(
 
     override suspend fun setFavorite(songId: String, favorite: Boolean): PulseResult<Unit> =
         withContext(dispatchers.io) {
-            // Optimistic: update Room first so the heart flips instantly, then tell the server.
-            songDao.setFavorite(songId, favorite)
-            val result = PulseResult.runCatchingResult {
-                val api = requireApi()
-                val itemId = UUID.fromString(songId)
-                if (favorite) api.userLibraryApi.markFavoriteItem(itemId = itemId)
-                else api.userLibraryApi.unmarkFavoriteItem(itemId = itemId)
-                Unit
+            // Serialize per song: without this, two rapid taps' optimistic-write-then-rollback
+            // pairs can interleave and let an earlier call's failure rollback stomp a later call's
+            // already-confirmed successful write.
+            favoriteMutexes.getOrPut(songId) { Mutex() }.withLock {
+                // Optimistic: update Room first so the heart flips instantly, then tell the server.
+                songDao.setFavorite(songId, favorite)
+                val result = PulseResult.runCatchingResult {
+                    val api = requireApi()
+                    val itemId = UUID.fromString(songId)
+                    if (favorite) api.userLibraryApi.markFavoriteItem(itemId = itemId)
+                    else api.userLibraryApi.unmarkFavoriteItem(itemId = itemId)
+                    Unit
+                }
+                // Roll back the optimistic write on failure so Room doesn't keep lying to the user.
+                if (result is PulseResult.Failure) songDao.setFavorite(songId, !favorite)
+                result
             }
-            // Roll back the optimistic write on failure so Room doesn't keep lying to the user.
-            if (result is PulseResult.Failure) songDao.setFavorite(songId, !favorite)
-            result
         }
 
     override fun observePlaylists(): Flow<List<Playlist>> =

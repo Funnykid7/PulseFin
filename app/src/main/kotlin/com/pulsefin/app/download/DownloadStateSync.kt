@@ -24,6 +24,12 @@ class DownloadStateSync(
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    // Falls back to the last metadata we actually saw for a song when a later join misses (e.g.
+    // the song was dropped from Room by a subsequent refreshLibrary() while still downloaded) —
+    // otherwise a transient miss would REPLACE an already-good row with blank title/artist/art.
+    private data class SongMetadata(val title: String, val artist: String, val artworkUrl: String?)
+    private val lastKnownMetadata = mutableMapOf<String, SongMetadata>()
+
     fun start() {
         scope.launch {
             var previousSongIds = emptySet<String>()
@@ -36,12 +42,18 @@ class DownloadStateSync(
                 .collect { (downloads, songsById) ->
                     downloads.forEach { (songId, download) ->
                         val song = songsById[songId]
+                        val metadata = if (song != null) {
+                            SongMetadata(song.title, song.artistName, song.artworkUrl)
+                                .also { lastKnownMetadata[songId] = it }
+                        } else {
+                            lastKnownMetadata[songId]
+                        }
                         downloadDao.upsert(
                             DownloadEntity(
                                 songId,
-                                song?.title.orEmpty(),
-                                song?.artistName.orEmpty(),
-                                song?.artworkUrl,
+                                metadata?.title.orEmpty(),
+                                metadata?.artist.orEmpty(),
+                                metadata?.artworkUrl,
                                 download.state.name,
                                 download.progressPercent,
                                 download.bytesDownloaded,
@@ -52,6 +64,7 @@ class DownloadStateSync(
                     }
                     (previousSongIds - downloads.keys).forEach { removedSongId ->
                         downloadDao.delete(removedSongId)
+                        lastKnownMetadata.remove(removedSongId)
                     }
                     previousSongIds = downloads.keys
                 }

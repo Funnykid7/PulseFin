@@ -4,9 +4,12 @@ import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.pulsefin.core.common.dispatchers.AppDispatchers
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** The persisted set-and-forget session for the single configured Jellyfin server. */
@@ -43,8 +46,19 @@ class SessionStore(context: Context, private val dispatchers: AppDispatchers) {
         )
     }
 
-    private val _session = MutableStateFlow(readSession())
+    private val _session = MutableStateFlow<Session?>(null)
     val session: Flow<Session?> = _session.asStateFlow()
+
+    private val scope = CoroutineScope(SupervisorJob() + dispatchers.io)
+
+    init {
+        // Populate the initial value here, off the constructor call stack: reading it via a plain
+        // field initializer (the previous approach) forces prefs' Keystore/crypto init and a disk
+        // read synchronously on whichever thread constructs this Koin single — which can be the
+        // main thread if Compose's first composition wins the race against PulseFinApp's IO
+        // warm-up, defeating the "deferred" intent of prefs' own `by lazy`.
+        scope.launch { _session.value = readSession() }
+    }
 
     suspend fun save(session: Session) = withContext(dispatchers.io) {
         prefs.edit()

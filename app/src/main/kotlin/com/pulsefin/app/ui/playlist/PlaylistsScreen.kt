@@ -19,13 +19,17 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,36 +49,58 @@ import com.pulsefin.app.R
 import com.pulsefin.app.ui.components.RefreshBox
 import com.pulsefin.app.ui.components.bouncyClickable
 import com.pulsefin.app.ui.components.pressScale
+import com.pulsefin.core.common.result.PulseResult
 import com.pulsefin.core.common.util.sizedArtUrl
 import com.pulsefin.core.designsystem.theme.SquircleShape
+import com.pulsefin.core.domain.model.DownloadState
 import com.pulsefin.core.domain.model.Playlist
+import com.pulsefin.core.domain.repository.DownloadRepository
 import com.pulsefin.core.domain.repository.MediaRepository
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
-class PlaylistsViewModel(private val repository: MediaRepository) : ViewModel() {
+class PlaylistsViewModel(
+    private val repository: MediaRepository,
+    downloadRepository: DownloadRepository,
+) : ViewModel() {
     val playlists: StateFlow<List<Playlist>> = repository.observePlaylists()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    val hasDownloads: StateFlow<Boolean> = downloadRepository.observeDownloads()
+        .map { downloads -> downloads.values.any { it.state == DownloadState.COMPLETED } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     var isRefreshing by mutableStateOf(false)
         private set
+
+    private val _actionError = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val actionError: SharedFlow<Unit> = _actionError.asSharedFlow()
 
     init { sync(force = false) }
 
     fun refresh() = sync(force = true)
 
     fun createPlaylist(name: String) {
-        viewModelScope.launch { repository.createPlaylist(name) }
+        viewModelScope.launch {
+            if (repository.createPlaylist(name) is PulseResult.Failure) _actionError.tryEmit(Unit)
+        }
     }
 
     private fun sync(force: Boolean) {
         viewModelScope.launch {
             if (force) isRefreshing = true
             repository.refreshLibrary(force = force)
-            isRefreshing = false
+            // Only this call's own isRefreshing=true should be cleared by it — otherwise a
+            // concurrently-running non-forced sync can clear the spinner for a still-in-progress
+            // forced (pull-to-refresh) one.
+            if (force) isRefreshing = false
         }
     }
 }
@@ -84,10 +110,17 @@ class PlaylistsViewModel(private val repository: MediaRepository) : ViewModel() 
 fun PlaylistsScreen(
     contentPadding: PaddingValues,
     onPlaylistClick: (id: String) -> Unit,
+    onDownloadsClick: () -> Unit,
     viewModel: PlaylistsViewModel = koinViewModel(),
 ) {
     val playlists by viewModel.playlists.collectAsStateWithLifecycle()
+    val hasDownloads by viewModel.hasDownloads.collectAsStateWithLifecycle()
     var showCreateDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val actionErrorMessage = stringResource(R.string.error_action_failed)
+    LaunchedEffect(viewModel) {
+        viewModel.actionError.collect { snackbarHostState.showSnackbar(actionErrorMessage) }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         RefreshBox(
@@ -108,6 +141,11 @@ fun PlaylistsScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (hasDownloads) {
+                    item(key = "downloads", contentType = "downloads") {
+                        DownloadsCard(onClick = onDownloadsClick, modifier = Modifier.animateItem())
+                    }
+                }
                 if (playlists.isEmpty()) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Box(
@@ -147,6 +185,7 @@ fun PlaylistsScreen(
         ) {
             Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.playlist_new))
         }
+        SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
 
     if (showCreateDialog) {
@@ -156,6 +195,33 @@ fun PlaylistsScreen(
                 viewModel.createPlaylist(name)
                 showCreateDialog = false
             },
+        )
+    }
+}
+
+@Composable
+private fun DownloadsCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Column(modifier = modifier.bouncyClickable(pressedScale = 0.95f, onClick = onClick)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(SquircleShape),
+            color = MaterialTheme.colorScheme.primaryContainer,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Filled.DownloadDone,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(32.dp),
+                )
+            }
+        }
+        Text(
+            text = stringResource(R.string.playlist_downloads_title),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 6.dp),
         )
     }
 }
@@ -199,7 +265,9 @@ private fun PlaylistArt(playlist: Playlist) {
             val url = art.firstOrNull() ?: playlist.artworkUrl
             if (url != null) {
                 AsyncImage(
-                    model = sizedArtUrl(url, 180),
+                    // 480, not 180: this fills a full 2-column grid tile, which at 2-3x density
+                    // is well above 180px — a flat 180 request upscaled to fill the tile blurred.
+                    model = sizedArtUrl(url, 480),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = tileModifier,
@@ -229,7 +297,9 @@ private fun PlaylistArt(playlist: Playlist) {
 private fun CollageQuadrant(url: String?, modifier: Modifier) {
     if (url != null) {
         AsyncImage(
-            model = sizedArtUrl(url, 180),
+            // Each quadrant is ~1/4 of the tile, so 240 (roughly half of the full-tile 480) is
+            // proportional rather than the same flat 180 used for a full-size cover.
+            model = sizedArtUrl(url, 240),
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = modifier,

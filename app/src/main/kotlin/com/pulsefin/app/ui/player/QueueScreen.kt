@@ -1,6 +1,5 @@
 package com.pulsefin.app.ui.player
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -56,9 +55,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulsefin.app.R
+import com.pulsefin.app.ui.components.HapticEffect
+import com.pulsefin.app.ui.components.LocalHapticsEnabled
 import com.pulsefin.app.ui.components.MediaRow
 import com.pulsefin.app.ui.components.bouncyClickable
+import com.pulsefin.app.ui.components.performHaptic
 import com.pulsefin.app.ui.components.pressScale
+import com.pulsefin.core.common.util.sizedArtUrl
 import com.pulsefin.core.playback.controller.PlaybackController
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -84,6 +87,7 @@ fun QueueScreen(
     val density = LocalDensity.current
     val rowHeightPx = with(density) { QUEUE_ROW_HEIGHT.toPx() }
     val view = LocalView.current
+    val hapticsEnabled = LocalHapticsEnabled.current
     var draggedIndex by remember { mutableIntStateOf(-1) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
 
@@ -117,13 +121,21 @@ fun QueueScreen(
     LaunchedEffect(playbackController) {
         playbackController.lastMovedMediaId.collect { mediaId ->
             if (mediaId == null) return@collect
+            // mediaId alone can't disambiguate a song that appears twice in the queue. playNext()
+            // always lands the moved item right after the current track, so when there's more than
+            // one occurrence, the one closest to that position is the one that was actually moved.
+            fun findMovedIndex() = playbackController.queue.value
+                .withIndex()
+                .filter { it.value.mediaId == mediaId }
+                .minByOrNull { kotlin.math.abs(it.index - (state.currentIndex + 1)) }
+                ?.index ?: -1
             // The queue StateFlow's own update (triggered by the same playNext() call) can land a
             // beat after this signal, since both cross the MediaController/session boundary
             // separately — retry once after a short delay if the item isn't visible yet.
-            var index = playbackController.queue.value.indexOfFirst { it.mediaId == mediaId }
+            var index = findMovedIndex()
             if (index < 0) {
                 delay(80)
-                index = playbackController.queue.value.indexOfFirst { it.mediaId == mediaId }
+                index = findMovedIndex()
             }
             if (index >= 0) {
                 listState.animateScrollToItem(index)
@@ -205,7 +217,7 @@ fun QueueScreen(
                     ) {
                         MediaRow(
                             title = item.title,
-                            imageModel = item.artworkUrl,
+                            imageModel = sizedArtUrl(item.artworkUrl, 180),
                             modifier = Modifier
                                 .background(MaterialTheme.colorScheme.primary.copy(alpha = highlightAlpha))
                                 .animateItem()
@@ -227,7 +239,9 @@ fun QueueScreen(
                                             onDragStart = {
                                                 draggedIndex = index
                                                 dragOffsetY = 0f
-                                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                                // Medium: the start of a drag gesture is a more
+                                                // deliberate engagement than a simple tap.
+                                                view.performHaptic(HapticEffect.Medium, hapticsEnabled)
                                             },
                                             onDrag = { change, dragAmount ->
                                                 change.consume()
