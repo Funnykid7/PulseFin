@@ -53,8 +53,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -104,6 +106,7 @@ fun NowPlayingScreen(
     onCollapse: () -> Unit,
     onOpenQueue: () -> Unit,
     onOpenLyrics: () -> Unit,
+    onDragProgressChanged: (Float) -> Unit = {},
     playbackController: PlaybackController = koinInject(),
     repository: MediaRepository = koinInject(),
     downloadRepository: DownloadRepository = koinInject(),
@@ -151,6 +154,7 @@ fun NowPlayingScreen(
                 onCollapse = onCollapse,
                 onOpenQueue = onOpenQueue,
                 onOpenLyrics = onOpenLyrics,
+                onDragProgressChanged = onDragProgressChanged,
                 playbackController = playbackController,
             )
         }
@@ -169,6 +173,7 @@ private fun NowPlayingContent(
     onCollapse: () -> Unit,
     onOpenQueue: () -> Unit,
     onOpenLyrics: () -> Unit,
+    onDragProgressChanged: (Float) -> Unit,
     playbackController: PlaybackController,
 ) {
     val sleepRemainingMs by playbackController.sleepRemainingMs.collectAsStateWithLifecycle()
@@ -181,6 +186,7 @@ private fun NowPlayingContent(
     // down instead of staying put until a fixed threshold, then teleporting away. Library defaults
     // (spring snap, velocity-aware fling) give the "let go early but flick fast" case a dismiss too.
     val dragState = remember { AnchoredDraggableState(initialValue = DragAnchor.Expanded) }
+    var dragExtentPx by remember { mutableFloatStateOf(1f) }
     LaunchedEffect(dragState) {
         snapshotFlow { dragState.settledValue }.collect { value ->
             if (value == DragAnchor.Dismissed) {
@@ -191,11 +197,24 @@ private fun NowPlayingContent(
             }
         }
     }
+    // Reports live drag progress (0f expanded -> 1f dismissed) so the nav host can fade/slide
+    // the mini-player and bottom nav back into view as the finger moves, instead of only
+    // revealing them once the drag has fully settled.
+    LaunchedEffect(dragState) {
+        snapshotFlow { dragState.offset }.collect { offset ->
+            val fraction = if (offset.isNaN()) 0f else (offset / dragExtentPx).coerceIn(0f, 1f)
+            onDragProgressChanged(fraction)
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose { onDragProgressChanged(0f) }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .onSizeChanged { size ->
+                dragExtentPx = size.height.toFloat().coerceAtLeast(1f)
                 dragState.updateAnchors(
                     DraggableAnchors {
                         DragAnchor.Expanded at 0f

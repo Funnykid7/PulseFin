@@ -54,6 +54,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,6 +64,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
@@ -172,6 +174,11 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
     val isFullScreen = currentRoute == Routes.NOWPLAYING || currentRoute == Routes.QUEUE ||
         currentRoute == Routes.LYRICS
 
+    // Live drag progress (0f expanded -> 1f dismissed) reported by NowPlayingScreen's
+    // drag-to-minimize gesture, used to fade/slide the mini-player and bottom nav back into
+    // view as the finger moves instead of only revealing them once the drag has settled.
+    val nowPlayingDragProgress = remember { mutableFloatStateOf(0f) }
+
     // LargeTopAppBar is designed to pair with exitUntilCollapsed (not enterAlways), which makes
     // the large title collapse smoothly instead of jumping around. Each tab gets its own instance
     // so scrolling one tab's list doesn't leave another tab's app bar mid-collapse when you switch.
@@ -224,9 +231,17 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
         bottomBar = {
             // Mini-player stacks above the tab bar. The NavigationBar consumes the system
             // inset on tab routes; on detail routes there's no NavigationBar, so pad the column.
-            Column(modifier = if (isTab) Modifier else Modifier.navigationBarsPadding()) {
+            val dragProgress = nowPlayingDragProgress.floatValue
+            val chromeAlpha = if (isFullScreen) dragProgress else 1f
+            Column(
+                modifier = (if (isTab) Modifier else Modifier.navigationBarsPadding())
+                    .graphicsLayer {
+                        alpha = chromeAlpha
+                        translationY = (1f - chromeAlpha) * size.height
+                    },
+            ) {
                 AnimatedVisibility(
-                    visible = playbackState.hasItem && !isFullScreen,
+                    visible = playbackState.hasItem && (!isFullScreen || dragProgress > 0f),
                     enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                     exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
                 ) {
@@ -240,7 +255,7 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                     }
                 }
                 AnimatedVisibility(
-                    visible = isTab,
+                    visible = isTab || (isFullScreen && dragProgress > 0f),
                     enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                     exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
                 ) {
@@ -376,6 +391,7 @@ fun PulseFinNavHost(modifier: Modifier = Modifier) {
                             onCollapse = { navController.popBackStack() },
                             onOpenQueue = { navController.navigate(Routes.QUEUE) { launchSingleTop = true } },
                             onOpenLyrics = { navController.navigate(Routes.LYRICS) { launchSingleTop = true } },
+                            onDragProgressChanged = { nowPlayingDragProgress.floatValue = it },
                         )
                     }
                     composable(
@@ -445,8 +461,42 @@ private val mildSlideSpring: FiniteAnimationSpec<IntOffset> =
 private val mildScaleSpring: FiniteAnimationSpec<Float> =
     spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)
 
-// Tab switches use a shared fade-through so Songs/Albums/Artists glide instead of hard-cutting.
-private val tabEnter: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition =
-    { fadeIn() + scaleIn(initialScale = 0.96f, animationSpec = mildScaleSpring) }
-private val tabExit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition =
-    { fadeOut() }
+// Route order for the bottom nav, used only to compute tab-switch slide direction below.
+// Must stay in the same order as the `tabs` list built inside PulseFinNavHost().
+private val tabRoutes: List<String> = listOf(
+    Routes.HOME,
+    Routes.SONGS,
+    Routes.ALBUMS,
+    Routes.ARTISTS,
+    Routes.PLAYLISTS,
+)
+
+// True when the tab switch should read as "moving right" (new content slides in from the
+// right, old content exits to the left) — i.e. the target tab sits at or after the initial
+// tab's position in the bottom nav. Falls back to "forward" whenever either side of the
+// transition isn't a recognized tab route (e.g. popping back from a detail/utility screen
+// into a tab, since those screens' popEnterTransition on the tab defaults to tabEnter too),
+// which keeps that return motion consistent with how those screens already enter from the
+// right elsewhere in this file, and never throws even if a route lookup misses.
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.isForwardTabSwitch(): Boolean {
+    val fromIndex = tabRoutes.indexOf(initialState.destination.route.orEmpty())
+    val toIndex = tabRoutes.indexOf(targetState.destination.route.orEmpty())
+    return toIndex >= fromIndex
+}
+
+// Tab switches slide directionally based on bottom-nav order (ViewPager-style paging) plus a
+// fade so Songs/Albums/Artists glide instead of hard-cutting or feeling like a random jump.
+private val tabEnter: AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition = {
+    if (isForwardTabSwitch()) {
+        slideInHorizontally(mildSlideSpring) { it / 3 } + fadeIn()
+    } else {
+        slideInHorizontally(mildSlideSpring) { -it / 3 } + fadeIn()
+    }
+}
+private val tabExit: AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition = {
+    if (isForwardTabSwitch()) {
+        slideOutHorizontally { -it / 3 } + fadeOut()
+    } else {
+        slideOutHorizontally { it / 3 } + fadeOut()
+    }
+}

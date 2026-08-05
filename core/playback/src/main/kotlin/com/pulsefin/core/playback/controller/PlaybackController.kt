@@ -233,9 +233,18 @@ class PlaybackController(
         }
     }
 
+    // controller.isPlaying only mirrors the session's real state asynchronously (via
+    // Player.Listener.onEvents below), so two taps fired faster than one round-trip can both
+    // read the same stale value and issue the same command twice. Tracking the last commanded
+    // intent locally keeps rapid alternating taps alternating regardless of that lag.
+    private var lastCommandedPlaying: Boolean? = null
+
     fun togglePlayPause() {
         withController { controller ->
-            if (controller.isPlaying) controller.pause() else controller.play()
+            val currentlyPlaying = lastCommandedPlaying ?: controller.isPlaying
+            val shouldPlay = !currentlyPlaying
+            lastCommandedPlaying = shouldPlay
+            if (shouldPlay) controller.play() else controller.pause()
         }
     }
 
@@ -389,6 +398,7 @@ class PlaybackController(
     }
 
     private fun updateState(player: Player) {
+        lastCommandedPlaying = player.isPlaying
         val metadata = player.mediaMetadata
         val duration = player.duration
         _state.value = PlaybackState(
