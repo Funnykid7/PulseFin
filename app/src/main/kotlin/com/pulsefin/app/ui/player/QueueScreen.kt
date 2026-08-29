@@ -237,6 +237,11 @@ fun QueueScreen(
                             title = item.title,
                             imageModel = sizedArtUrl(item.artworkUrl, 180),
                             modifier = Modifier
+                                // MediaRow itself paints no background (by design — it's reused
+                                // across screens with different containers underneath), so without
+                                // this opaque layer first, SwipeToDismissBox's red backgroundContent
+                                // above shows straight through at rest, not just mid-swipe.
+                                .background(MaterialTheme.colorScheme.background)
                                 .background(MaterialTheme.colorScheme.primary.copy(alpha = highlightAlpha))
                                 .animateItem()
                                 .graphicsLayer { translationY = if (isDragged) dragOffsetY else reflowOffset }
