@@ -38,14 +38,16 @@ jobs:
 
       - name: Build signed release APK
         env:
+          APP_VERSION_NAME: ${{ steps.version.outputs.name }}
+          APP_VERSION_CODE: ${{ steps.version.outputs.code }}
           RELEASE_STORE_FILE: ${{ runner.temp }}/release.keystore
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           ./gradlew :app:assembleRelease --no-daemon \
-            -PAPP_VERSION_NAME="${{ steps.version.outputs.name }}" \
-            -PAPP_VERSION_CODE="${{ steps.version.outputs.code }}"
+            -PAPP_VERSION_NAME="$APP_VERSION_NAME" \
+            -PAPP_VERSION_CODE="$APP_VERSION_CODE"
 
       - name: Rename APK for release
         run: cp app/build/outputs/apk/release/app-release.apk PulseFin.apk
