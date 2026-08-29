@@ -9,7 +9,7 @@ import com.pulsefin.core.domain.repository.AuthRepository
 import com.pulsefin.core.domain.repository.AuthState
 import com.pulsefin.core.domain.repository.MediaRepository
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.withContext
 import org.jellyfin.sdk.Jellyfin
 import org.jellyfin.sdk.api.client.extensions.userApi
@@ -28,11 +28,14 @@ class AuthRepositoryImpl(
     private val mediaRepository: MediaRepository,
 ) : AuthRepository {
 
-    override val authState: Flow<AuthState> = sessionStore.session.map { session ->
-        if (session != null) {
-            AuthState.LoggedIn(session.serverUrl, session.userName)
-        } else {
-            AuthState.LoggedOut
+    // isLoaded gates LoggedOut vs. Unknown: SessionStore's disk read completes asynchronously, so
+    // without it, every cold start briefly (but deterministically) reports LoggedOut for an
+    // already-signed-in user before the real session value arrives.
+    override val authState: Flow<AuthState> = combine(sessionStore.session, sessionStore.isLoaded) { session, loaded ->
+        when {
+            !loaded -> AuthState.Unknown
+            session != null -> AuthState.LoggedIn(session.serverUrl, session.userName)
+            else -> AuthState.LoggedOut
         }
     }
 
@@ -88,9 +91,11 @@ class AuthRepositoryImpl(
     }
 
     override suspend fun logout() {
+        // Cancel (and await) any in-flight refreshLibrary() first — otherwise a straggling sync
+        // can finish after database.clearAll() and write the logged-out user's data right back in.
+        mediaRepository.resetSyncState()
         sessionStore.clear()
         database.clearAll()
-        mediaRepository.resetSyncState()
     }
 }
 

@@ -11,6 +11,7 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
+import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -207,9 +208,13 @@ abstract class PulseFinDatabase : RoomDatabase() {
     abstract fun playlistDao(): PlaylistDao
     abstract fun downloadDao(): DownloadDao
 
-    /** Wipes every locally-mirrored table — used on logout so no trace of the prior user remains. */
-    @Transaction
-    open suspend fun clearAll() {
+    /**
+     * Wipes every locally-mirrored table — used on logout so no trace of the prior user remains.
+     * Room's KSP processor only instruments `@Transaction` on `@Dao` methods, not methods on the
+     * `@Database` class itself, so this must use the real `withTransaction` API instead of the
+     * (silently inert, here) annotation.
+     */
+    open suspend fun clearAll() = withTransaction {
         songDao().clear()
         albumDao().clear()
         artistDao().clear()

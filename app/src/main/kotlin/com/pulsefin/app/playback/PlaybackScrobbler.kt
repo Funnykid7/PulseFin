@@ -20,10 +20,19 @@ class PlaybackScrobbler(
     private val playbackController: PlaybackController,
     private val repository: MediaRepository,
 ) {
-    // One session ID for the whole app process, matching how Jellyfin clients group a
-    // continuous listening session across multiple tracks, not one ID per track.
-    private val playSessionId = UUID.randomUUID().toString()
+    // Groups a continuous listening session across multiple tracks, matching how Jellyfin
+    // clients report "now playing" — not one ID per track. Regenerated on login/logout via
+    // resetSession() so two different users in the same process lifetime never share one id.
+    private var playSessionId = UUID.randomUUID().toString()
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    /** Call on login/logout so a new session (possibly a different user) gets its own id. */
+    fun resetSession() {
+        playSessionId = UUID.randomUUID().toString()
+        reportedMediaId = null
+        lastProgressReportMs = 0L
+        lastKnownPositionMs = 0L
+    }
 
     private var reportedMediaId: String? = null
     private var lastProgressReportMs = 0L
@@ -57,6 +66,9 @@ class PlaybackScrobbler(
                         lastKnownPositionMs,
                         !state.isPlaying,
                     )
+                    // Otherwise the periodic collector below fires again moments later at an
+                    // almost-identical position, since it only measures elapsed position, not time.
+                    lastProgressReportMs = lastKnownPositionMs
                 }
             }
         }

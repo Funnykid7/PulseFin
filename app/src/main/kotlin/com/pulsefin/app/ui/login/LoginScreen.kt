@@ -156,10 +156,10 @@ fun LoginScreen(viewModel: LoginViewModel = koinViewModel()) {
                         exit = fadeOut() + shrinkVertically(),
                     ) {
                         Text(
-                            text = when (val error = state.error) {
+                            text = when (state.error) {
                                 null -> ""
                                 is LoginError.Required -> stringResource(R.string.login_error_required)
-                                is LoginError.Failed -> error.message ?: stringResource(R.string.login_error_failed)
+                                is LoginError.Failed -> stringResource(R.string.login_error_failed)
                             },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.error,

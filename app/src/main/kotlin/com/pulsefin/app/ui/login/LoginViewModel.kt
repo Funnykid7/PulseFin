@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.pulsefin.app.playback.PlaybackScrobbler
 import com.pulsefin.core.common.result.PulseResult
 import com.pulsefin.core.domain.repository.AuthRepository
 import kotlinx.coroutines.launch
@@ -12,7 +13,7 @@ import kotlinx.coroutines.launch
 /** Login failures, so [LoginScreen] can resolve display text via stringResource. */
 sealed interface LoginError {
     data object Required : LoginError
-    data class Failed(val message: String?) : LoginError
+    data object Failed : LoginError
 }
 
 data class LoginUiState(
@@ -27,6 +28,7 @@ data class LoginUiState(
 
 class LoginViewModel(
     private val authRepository: AuthRepository,
+    private val playbackScrobbler: PlaybackScrobbler,
 ) : ViewModel() {
 
     var uiState by mutableStateOf(LoginUiState())
@@ -66,10 +68,13 @@ class LoginViewModel(
             )
             // On success, the authState flow drives navigation; just clear the spinner.
             uiState = when (result) {
-                is PulseResult.Success -> uiState.copy(isSubmitting = false)
+                is PulseResult.Success -> {
+                    playbackScrobbler.resetSession()
+                    uiState.copy(isSubmitting = false)
+                }
                 is PulseResult.Failure -> uiState.copy(
                     isSubmitting = false,
-                    error = LoginError.Failed(result.error.message),
+                    error = LoginError.Failed,
                 )
             }
         }

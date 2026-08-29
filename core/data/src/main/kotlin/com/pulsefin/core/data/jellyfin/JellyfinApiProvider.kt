@@ -6,6 +6,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.jellyfin.sdk.Jellyfin
 import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.exception.InvalidStatusException
 
 /**
  * Builds and caches an authenticated [ApiClient] for the current session. Returns null when
@@ -23,6 +24,25 @@ class JellyfinApiProvider(
 
     /** The signed-in user's ID, needed by Jellyfin calls that require an explicit owner (e.g. playlist creation). */
     suspend fun currentUserId(): String? = sessionStore.session.first()?.userId
+
+    /**
+     * Synchronous, cheap token read — no [ApiClient] build, no disk I/O, no mutex. For callers
+     * that can't suspend, e.g. Media3's ResolvingDataSource.Resolver.
+     */
+    val currentAccessToken: String? get() = sessionStore.currentSession?.accessToken
+
+    /**
+     * Clears the session if [error] is a 401 (server-side session revocation — password change,
+     * revoked API key, token-expiry policy). Every repository call site that goes through
+     * [PulseResult.runCatchingResult][com.pulsefin.core.common.result.PulseResult.Companion.runCatchingResult]
+     * should route its failure through this so a revoked session actually transitions AuthState
+     * to LoggedOut instead of leaving the UI permanently stuck reporting generic failures.
+     */
+    suspend fun invalidateSessionIfUnauthorized(error: Throwable) {
+        if ((error as? InvalidStatusException)?.status == 401) {
+            sessionStore.clear()
+        }
+    }
 
     /** The authenticated client for the active session, or null if not signed in. */
     suspend fun api(): ApiClient? {

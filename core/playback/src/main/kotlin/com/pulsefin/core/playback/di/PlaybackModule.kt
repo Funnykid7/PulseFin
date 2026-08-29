@@ -1,8 +1,10 @@
 package com.pulsefin.core.playback.di
 
+import android.net.Uri
 import androidx.media3.database.DatabaseProvider
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.NoOpCacheEvictor
@@ -49,11 +51,19 @@ val playbackModule: Module = module {
             .setCacheWriteDataSinkFactory(null)
     }
     single {
+        // Persisted DownloadRequests (this DownloadManager's on-disk index) must never carry the
+        // session's auth token — see DownloadRepositoryImpl.download(), which now resolves a
+        // token-free URI to build them. Wrap the upstream fetcher so every actual HTTP request
+        // (including resumes after reboot) gets a token attached fresh, in memory only.
+        val resolver = get<StreamUrlResolver>()
+        val resolvingUpstream = ResolvingDataSource.Factory(DefaultHttpDataSource.Factory()) { dataSpec ->
+            dataSpec.withUri(Uri.parse(resolver.attachAuthToken(dataSpec.uri.toString())))
+        }
         DownloadManager(
             androidContext(),
             get<DatabaseProvider>(),
             get<SimpleCache>(),
-            DefaultHttpDataSource.Factory(),
+            resolvingUpstream,
             Executors.newFixedThreadPool(2),
         )
     }

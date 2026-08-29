@@ -49,7 +49,12 @@ suspend fun PersistedQueueItem.toMediaItem(resolver: StreamUrlResolver): MediaIt
                 .setTitle(title)
                 .setArtist(artist)
                 .setAlbumTitle(album)
-                .apply { artworkUrl?.let { setArtworkUri(Uri.parse(it)) } }
+                // artworkUrl is persisted without a token (see QueueStateStore.save); reattach one.
+                .apply {
+                    artworkUrl?.let { base ->
+                        setArtworkUri(Uri.parse(resolver.resolveArtworkUrl(base) ?: base))
+                    }
+                }
                 .build(),
         )
         .build()
@@ -80,7 +85,7 @@ class QueueStateStore(private val context: Context) {
                         .put("title", item.title)
                         .put("artist", item.artist)
                         .put("album", item.album)
-                        .put("art", item.artworkUrl.orEmpty()),
+                        .put("art", stripAuthToken(item.artworkUrl).orEmpty()),
                 )
             }
             prefs[Keys.ITEMS] = array.toString()
@@ -110,4 +115,13 @@ class QueueStateStore(private val context: Context) {
             positionMs = prefs[Keys.POSITION_MS] ?: 0L,
         )
     }
+}
+
+// Defense in depth: artworkUrl is expected to already be token-free by the time it reaches here
+// (MediaRepositoryImpl no longer attaches one), but strip it if present so a live MediaItem's
+// artworkUri — which does carry one, for Media3's own fetch — can never leak into this store.
+private fun stripAuthToken(url: String?): String? {
+    val index = url?.indexOf("api_key=") ?: -1
+    if (url == null || index == -1) return url
+    return url.substring(0, index).trimEnd('?', '&')
 }

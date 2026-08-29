@@ -195,9 +195,16 @@ fun QueueScreen(
                         label = "queueHighlight",
                     )
                     val dismissState = rememberSwipeToDismissBoxState()
+                    // Stabilized by index: Material3's SwipeToDismissBox internally keys a
+                    // LaunchedEffect on this lambda's identity, and any PlaybackController.state
+                    // change (e.g. the current track advancing) recomposes every visible row — an
+                    // un-remembered lambda here would restart that effect and can fire onDismiss a
+                    // second time, deleting whatever item now sits at this index.
+                    val onDismiss: (SwipeToDismissBoxValue) -> Unit =
+                        remember(index) { { playbackController.removeFromQueue(index) } }
                     SwipeToDismissBox(
                         state = dismissState,
-                        onDismiss = { playbackController.removeFromQueue(index) },
+                        onDismiss = onDismiss,
                         backgroundContent = {
                             Row(
                                 modifier = Modifier

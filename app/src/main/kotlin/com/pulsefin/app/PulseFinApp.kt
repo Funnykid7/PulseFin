@@ -7,15 +7,18 @@ import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.pulsefin.app.di.appModule
 import com.pulsefin.app.download.DownloadStateSync
+import com.pulsefin.app.image.JellyfinArtworkInterceptor
 import com.pulsefin.app.playback.PlaybackScrobbler
 import com.pulsefin.core.data.di.dataModule
 import com.pulsefin.core.domain.repository.AuthRepository
+import com.pulsefin.core.domain.repository.StreamUrlResolver
 import com.pulsefin.core.playback.di.playbackModule
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.koin.android.ext.android.getKoin
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.startKoin
@@ -45,10 +48,13 @@ class PulseFinApp : Application(), ImageLoaderFactory {
     /**
      * Tuned image loader for smooth scrolling on low-end devices: RGB_565 halves bitmap memory,
      * caching is forced on (ignore server no-cache headers) so re-scrolls hit the cache, and a
-     * generous memory + disk cache avoids re-decoding covers.
+     * generous memory + disk cache avoids re-decoding covers. Artwork URLs from the repository
+     * are deliberately token-free (see MediaRepositoryImpl.artworkUrl); JellyfinArtworkInterceptor
+     * attaches the current session's token at load time instead.
      */
     override fun newImageLoader(): ImageLoader =
         ImageLoader.Builder(this)
+            .components { add(JellyfinArtworkInterceptor(getKoin().get<StreamUrlResolver>())) }
             .crossfade(false)
             .allowRgb565(true)
             .respectCacheHeaders(false)

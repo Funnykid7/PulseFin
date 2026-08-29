@@ -19,9 +19,6 @@ import com.pulsefin.app.R
 @Composable
 fun NewPlaylistDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
     var name by remember { mutableStateOf("") }
-    // Guards against a fast double-tap firing onCreate twice before the caller dismisses this
-    // dialog (the actual network call runs in the caller's own coroutine scope, not here).
-    var isSubmitting by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.playlist_new)) },
@@ -37,11 +34,8 @@ fun NewPlaylistDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
         },
         confirmButton = {
             TextButton(
-                onClick = {
-                    isSubmitting = true
-                    onCreate(name.trim())
-                },
-                enabled = name.isNotBlank() && !isSubmitting,
+                onClick = { onCreate(name.trim()) },
+                enabled = name.isNotBlank(),
             ) {
                 Text(stringResource(R.string.action_create))
             }

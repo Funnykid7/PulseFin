@@ -2,11 +2,13 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="sharedpref" path="pulsefin_session_secure.xml" />
+        <exclude domain="database" path="pulsefin.db" />
         <exclude domain="database" path="exoplayer_internal.db" />
         <exclude domain="file" path="media_cache/" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="pulsefin_session_secure.xml" />
+        <exclude domain="database" path="pulsefin.db" />
         <exclude domain="database" path="exoplayer_internal.db" />
         <exclude domain="file" path="media_cache/" />
     </device-transfer>

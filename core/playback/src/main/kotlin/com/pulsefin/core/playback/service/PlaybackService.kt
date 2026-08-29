@@ -17,6 +17,7 @@ import com.pulsefin.core.playback.queue.QueueStateStore
 import com.pulsefin.core.playback.queue.toMediaItem
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -35,6 +36,7 @@ class PlaybackService : MediaSessionService() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private var mediaSession: MediaSession? = null
+    private var restoreJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -67,13 +69,17 @@ class PlaybackService : MediaSessionService() {
 
         // Restore the last queue so a relaunch after process death (not just a fresh app start)
         // has something to resume — prepared but not auto-played.
-        serviceScope.launch {
+        restoreJob = serviceScope.launch {
             val restored = queueStateStore.load() ?: return@launch
             // Capture by mediaId before resolving: a failed resolution can drop an item, which
             // would otherwise shift restored.currentIndex onto the wrong song.
             val currentMediaId = restored.items.getOrNull(restored.currentIndex)?.mediaId
             val items = restored.items.mapNotNull { it.toMediaItem(streamUrlResolver) }
             if (items.isEmpty()) return@launch
+            // A MediaController (e.g. a tap on a song right after cold start) can reach this same
+            // player and start its own playback during the disk/network I/O this coroutine just
+            // suspended on above — don't clobber it with the stale restored queue.
+            if (player.mediaItemCount > 0) return@launch
             val startIndex = items.indexOfFirst { it.mediaId == currentMediaId }.takeIf { it >= 0 }
             // If the previously-current track itself failed to resolve, startIndex falls back to
             // 0 — a different song. Its saved position belongs to the original track, not this

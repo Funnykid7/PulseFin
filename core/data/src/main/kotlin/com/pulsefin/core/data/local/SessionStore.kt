@@ -49,6 +49,20 @@ class SessionStore(context: Context, private val dispatchers: AppDispatchers) {
     private val _session = MutableStateFlow<Session?>(null)
     val session: Flow<Session?> = _session.asStateFlow()
 
+    // Distinguishes "not yet read from disk" from "read, and there's no session" — both look
+    // like a null _session, but callers (AuthRepositoryImpl.authState) need to tell them apart
+    // to avoid a spurious LoggedOut flash before the disk read in init{} below completes.
+    private val _isLoaded = MutableStateFlow(false)
+    val isLoaded: Flow<Boolean> = _isLoaded.asStateFlow()
+
+    /**
+     * Synchronous snapshot of the current session, for callers that can't suspend (e.g. Media3's
+     * ResolvingDataSource.Resolver, invoked on a download loader thread). Reflects the same state
+     * as [session]; may briefly be null immediately after process start, before this class's own
+     * init{} finishes its async read of EncryptedSharedPreferences.
+     */
+    val currentSession: Session? get() = _session.value
+
     private val scope = CoroutineScope(SupervisorJob() + dispatchers.io)
 
     init {
@@ -57,7 +71,10 @@ class SessionStore(context: Context, private val dispatchers: AppDispatchers) {
         // read synchronously on whichever thread constructs this Koin single — which can be the
         // main thread if Compose's first composition wins the race against PulseFinApp's IO
         // warm-up, defeating the "deferred" intent of prefs' own `by lazy`.
-        scope.launch { _session.value = readSession() }
+        scope.launch {
+            _session.value = readSession()
+            _isLoaded.value = true
+        }
     }
 
     suspend fun save(session: Session) = withContext(dispatchers.io) {
@@ -68,11 +85,13 @@ class SessionStore(context: Context, private val dispatchers: AppDispatchers) {
             .apply { session.userId?.let { putString(Keys.USER_ID, it) } ?: remove(Keys.USER_ID) }
             .apply()
         _session.value = session
+        _isLoaded.value = true
     }
 
     suspend fun clear() = withContext(dispatchers.io) {
         prefs.edit().clear().apply()
         _session.value = null
+        _isLoaded.value = true
     }
 
     private fun readSession(): Session? {
