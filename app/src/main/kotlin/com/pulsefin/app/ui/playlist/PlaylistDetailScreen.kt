@@ -51,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -71,6 +72,7 @@ import com.pulsefin.core.domain.repository.DownloadRepository
 import com.pulsefin.core.domain.repository.MediaRepository
 import com.pulsefin.core.playback.controller.PlaybackController
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -87,7 +89,7 @@ import org.koin.androidx.compose.koinViewModel
 data class PlaylistDetailUiState(
     val isLoading: Boolean = true,
     val songs: List<Song> = emptyList(),
-    val error: String? = null,
+    val error: Boolean = false,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -119,8 +121,12 @@ class PlaylistDetailViewModel(
     fun removeSong(entryId: String) {
         val id = _playlistId.value ?: return
         viewModelScope.launch {
-            repository.removeFromPlaylist(id, listOf(entryId))
-            reloadSongs()
+            // Mirror rename/delete below: check the result and surface a snackbar on failure,
+            // instead of silently reloading the unchanged list with no explanation.
+            when (repository.removeFromPlaylist(id, listOf(entryId))) {
+                is PulseResult.Success -> reloadSongs()
+                is PulseResult.Failure -> _actionError.tryEmit(Unit)
+            }
         }
     }
 
@@ -161,16 +167,20 @@ class PlaylistDetailViewModel(
         }
     }
 
+    private var reloadJob: Job? = null
+
     private fun reloadSongs() {
         val id = _playlistId.value ?: return
-        uiState = uiState.copy(isLoading = true, error = null)
-        viewModelScope.launch {
+        uiState = uiState.copy(isLoading = true, error = false)
+        // Cancel/replace any prior reload instead of launching an independent one: rapid
+        // back-to-back removals would otherwise each launch their own untracked reload, and
+        // whichever network round-trip happens to finish last wins — not whichever was issued
+        // last — leaving a stale list on screen.
+        reloadJob?.cancel()
+        reloadJob = viewModelScope.launch {
             uiState = when (val result = repository.songsForPlaylist(id)) {
                 is PulseResult.Success -> PlaylistDetailUiState(isLoading = false, songs = result.data)
-                is PulseResult.Failure -> PlaylistDetailUiState(
-                    isLoading = false,
-                    error = result.error.message,
-                )
+                is PulseResult.Failure -> PlaylistDetailUiState(isLoading = false, error = true)
             }
         }
     }
@@ -263,9 +273,9 @@ fun PlaylistDetailScreen(
                             LoadingIndicator()
                         }
                     }
-                    state.error != null -> item(contentType = "status") {
+                    state.error -> item(contentType = "status") {
                         Box(modifier = Modifier.fillParentMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
-                            Text(state.error, color = MaterialTheme.colorScheme.error)
+                            Text(actionErrorMessage, color = MaterialTheme.colorScheme.error)
                         }
                     }
                     state.songs.isEmpty() -> item(contentType = "status") {
@@ -397,7 +407,7 @@ private fun PlaylistDetailHeader(
     ) {
         Text(name, style = MaterialTheme.typography.headlineSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Text(
-            stringResource(R.string.playlist_song_count, songCount),
+            pluralStringResource(R.plurals.playlist_song_count, songCount, songCount),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

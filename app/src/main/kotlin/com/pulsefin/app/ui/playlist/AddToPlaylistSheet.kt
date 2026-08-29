@@ -49,7 +49,13 @@ fun AddToPlaylistSheet(
     val actionErrorMessage = stringResource(R.string.error_action_failed)
     val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    ModalBottomSheet(
+        // Swipe/scrim/back dismissal must not cancel an in-flight addToPlaylist/createPlaylist —
+        // that would cancel this composable's own rememberCoroutineScope mid-request, per the
+        // comment below on the request itself.
+        onDismissRequest = { if (!isSubmitting) onDismiss() },
+        sheetState = sheetState,
+    ) {
         Text(
             text = stringResource(R.string.song_menu_add_to_playlist),
             style = MaterialTheme.typography.titleLarge,

@@ -570,6 +570,7 @@ private fun PlaybackError.toMessage(): String = stringResource(
         PlaybackError.Network -> R.string.error_network
         PlaybackError.Auth -> R.string.error_auth
         PlaybackError.NotFound -> R.string.error_not_found
+        PlaybackError.ServerError -> R.string.error_server
         PlaybackError.Unknown -> R.string.error_unknown
     },
 )

@@ -2,6 +2,7 @@ package com.pulsefin.app.ui.search
 
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -72,6 +73,7 @@ data class SearchUiState(
     val query: String = "",
     val isSearching: Boolean = false,
     val results: SearchResults = SearchResults(emptyList(), emptyList(), emptyList()),
+    val error: Boolean = false,
 )
 
 class SearchViewModel(
@@ -102,17 +104,27 @@ class SearchViewModel(
 
     private suspend fun runSearch(query: String) {
         if (query.isBlank()) {
-            uiState = uiState.copy(isSearching = false, results = SearchResults(emptyList(), emptyList(), emptyList()))
+            uiState = uiState.copy(
+                isSearching = false,
+                results = SearchResults(emptyList(), emptyList(), emptyList()),
+                error = false,
+            )
             return
         }
         uiState = uiState.copy(isSearching = true)
-        val result = repository.search(query)
-        uiState = uiState.copy(
-            isSearching = false,
-            results = (result as? PulseResult.Success)?.data
-                ?: SearchResults(emptyList(), emptyList(), emptyList()),
-        )
-        if (result is PulseResult.Success) repository.recordSearch(query)
+        when (val result = repository.search(query)) {
+            is PulseResult.Success -> {
+                uiState = uiState.copy(isSearching = false, results = result.data, error = false)
+                repository.recordSearch(query)
+            }
+            is PulseResult.Failure -> {
+                uiState = uiState.copy(
+                    isSearching = false,
+                    results = SearchResults(emptyList(), emptyList(), emptyList()),
+                    error = true,
+                )
+            }
+        }
     }
 
     fun playSong(index: Int) = viewModelScope.launch { playbackController.play(uiState.results.songs, index) }
@@ -193,95 +205,150 @@ fun SearchScreen(
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
-        ) {
-            if (state.query.isBlank()) {
-                if (recentSearches.isNotEmpty()) {
-                    item {
-                        androidx.compose.foundation.layout.Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            SectionHeader(stringResource(R.string.section_recent_searches))
-                            TextButton(
-                                onClick = { viewModel.clearRecentSearches() },
-                                modifier = Modifier.padding(end = 8.dp),
-                            ) { Text(stringResource(R.string.action_clear_all)) }
-                        }
-                    }
-                    items(recentSearches, key = { "rs-$it" }) { query ->
-                        RecentSearchRow(
-                            query = query,
-                            onClick = { viewModel.onQueryChange(query) },
-                            onRemove = { viewModel.removeRecentSearch(query) },
-                            modifier = Modifier.animateItem(),
-                        )
-                    }
-                }
-                return@LazyColumn
-            }
-            if (results.songs.isNotEmpty()) {
-                item { SectionHeader(stringResource(R.string.tab_songs)) }
-                itemsIndexed(
-                    results.songs,
-                    key = { _, s -> "s-${s.id.value}" },
-                    contentType = { _, _ -> "song" },
-                ) { index, song ->
-                    SongResultRow(
-                        song = song,
-                        downloadState = downloadStates[song.id.value] ?: DownloadState.NONE,
-                        onClick = { viewModel.playSong(index) },
-                        onPlayNext = { viewModel.playNext(song) },
-                        onAddToQueue = { viewModel.addToQueue(song) },
-                        onAddToPlaylist = { addToPlaylistSongId = song.id.value },
-                        onToggleDownload = { viewModel.toggleDownload(song) },
-                        modifier = Modifier.animateItem(),
-                    )
-                }
-            }
-            if (results.albums.isNotEmpty()) {
-                item { SectionHeader(stringResource(R.string.tab_albums)) }
-                itemsIndexed(
-                    results.albums,
-                    key = { _, a -> "al-${a.id.value}" },
-                    contentType = { _, _ -> "result" },
-                ) { _, album ->
-                    ResultRow(
-                        title = album.name,
-                        subtitle = album.artistName,
-                        artworkUrl = album.artworkUrl,
-                        circle = false,
-                        onClick = { onAlbumClick(album.id.value, album.artworkUrl) },
-                        modifier = Modifier.animateItem(),
-                    )
-                }
-            }
-            if (results.artists.isNotEmpty()) {
-                item { SectionHeader(stringResource(R.string.tab_artists)) }
-                itemsIndexed(
-                    results.artists,
-                    key = { _, a -> "ar-${a.id.value}" },
-                    contentType = { _, _ -> "result" },
-                ) { _, artist ->
-                    ResultRow(
-                        title = artist.name,
-                        subtitle = null,
-                        artworkUrl = artist.artworkUrl,
-                        circle = true,
-                        onClick = { onArtistClick(artist.id.value) },
-                        modifier = Modifier.animateItem(),
-                    )
-                }
-            }
-        }
+        // A separate composable, not inlined here: its parameters (isQueryBlank/error/results/
+        // recentSearches/downloadStates) are narrower than the full uiState this screen reads for
+        // the TextField above, so Compose can skip re-invoking this whole list-walk on a keystroke
+        // that doesn't actually change any of them (i.e. every keystroke that doesn't cross the
+        // blank/non-blank boundary) — inlined, this function's own recomposition on `state.query`
+        // changing would have forced the itemsIndexed blocks below to redeclare on every keystroke,
+        // before the debounced search even returns.
+        SearchResultsList(
+            isQueryBlank = state.query.isBlank(),
+            isSearching = state.isSearching,
+            error = state.error,
+            results = results,
+            recentSearches = recentSearches,
+            downloadStates = downloadStates,
+            bottomPadding = contentPadding.calculateBottomPadding(),
+            viewModel = viewModel,
+            onAlbumClick = onAlbumClick,
+            onArtistClick = onArtistClick,
+            onAddToPlaylist = { addToPlaylistSongId = it },
+        )
     }
 
     val songIdForSheet = addToPlaylistSongId
     if (songIdForSheet != null) {
         AddToPlaylistSheet(songId = songIdForSheet, onDismiss = { addToPlaylistSongId = null })
+    }
+}
+
+@Composable
+private fun SearchResultsList(
+    isQueryBlank: Boolean,
+    isSearching: Boolean,
+    error: Boolean,
+    results: SearchResults,
+    recentSearches: List<String>,
+    downloadStates: Map<String, DownloadState>,
+    bottomPadding: androidx.compose.ui.unit.Dp,
+    viewModel: SearchViewModel,
+    onAlbumClick: (id: String, artUrl: String?) -> Unit,
+    onArtistClick: (String) -> Unit,
+    onAddToPlaylist: (String) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = bottomPadding),
+    ) {
+        if (isQueryBlank) {
+            if (recentSearches.isNotEmpty()) {
+                item {
+                    androidx.compose.foundation.layout.Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        SectionHeader(stringResource(R.string.section_recent_searches))
+                        TextButton(
+                            onClick = { viewModel.clearRecentSearches() },
+                            modifier = Modifier.padding(end = 8.dp),
+                        ) { Text(stringResource(R.string.action_clear_all)) }
+                    }
+                }
+                items(recentSearches, key = { "rs-$it" }) { query ->
+                    RecentSearchRow(
+                        query = query,
+                        onClick = { viewModel.onQueryChange(query) },
+                        onRemove = { viewModel.removeRecentSearch(query) },
+                        modifier = Modifier.animateItem(),
+                    )
+                }
+            }
+            return@LazyColumn
+        }
+        if (error) {
+            item(contentType = "status") {
+                Text(
+                    stringResource(R.string.error_action_failed),
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                )
+            }
+            return@LazyColumn
+        }
+        if (results.songs.isNotEmpty()) {
+            item { SectionHeader(stringResource(R.string.tab_songs)) }
+            itemsIndexed(
+                results.songs,
+                key = { _, s -> "s-${s.id.value}" },
+                contentType = { _, _ -> "song" },
+            ) { index, song ->
+                SongResultRow(
+                    song = song,
+                    downloadState = downloadStates[song.id.value] ?: DownloadState.NONE,
+                    onClick = { viewModel.playSong(index) },
+                    onPlayNext = { viewModel.playNext(song) },
+                    onAddToQueue = { viewModel.addToQueue(song) },
+                    onAddToPlaylist = { onAddToPlaylist(song.id.value) },
+                    onToggleDownload = { viewModel.toggleDownload(song) },
+                    modifier = Modifier.animateItem(),
+                )
+            }
+        }
+        if (results.albums.isNotEmpty()) {
+            item { SectionHeader(stringResource(R.string.tab_albums)) }
+            itemsIndexed(
+                results.albums,
+                key = { _, a -> "al-${a.id.value}" },
+                contentType = { _, _ -> "result" },
+            ) { _, album ->
+                ResultRow(
+                    title = album.name,
+                    subtitle = album.artistName,
+                    artworkUrl = album.artworkUrl,
+                    circle = false,
+                    onClick = { onAlbumClick(album.id.value, album.artworkUrl) },
+                    modifier = Modifier.animateItem(),
+                )
+            }
+        }
+        if (results.artists.isNotEmpty()) {
+            item { SectionHeader(stringResource(R.string.tab_artists)) }
+            itemsIndexed(
+                results.artists,
+                key = { _, a -> "ar-${a.id.value}" },
+                contentType = { _, _ -> "result" },
+            ) { _, artist ->
+                ResultRow(
+                    title = artist.name,
+                    subtitle = null,
+                    artworkUrl = artist.artworkUrl,
+                    circle = true,
+                    onClick = { onArtistClick(artist.id.value) },
+                    modifier = Modifier.animateItem(),
+                )
+            }
+        }
+        // Query non-blank, search finished, error already handled above — a genuine zero-match
+        // search reaching here previously rendered a blank screen indistinguishable from broken.
+        if (!isSearching && results.songs.isEmpty() && results.albums.isEmpty() && results.artists.isEmpty()) {
+            item(contentType = "status") {
+                Box(modifier = Modifier.fillParentMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
+                    Text(stringResource(R.string.search_no_results), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
     }
 }
 

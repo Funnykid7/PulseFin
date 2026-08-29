@@ -50,7 +50,10 @@ class ArtistsViewModel(private val repository: MediaRepository) : ViewModel() {
             // Spinner only for user-initiated pulls; the silent startup sync shouldn't flash it.
             if (force) isRefreshing = true
             repository.refreshLibrary(force = force)
-            isRefreshing = false
+            // Only this call's own isRefreshing=true should be cleared by it — otherwise a
+            // concurrently-running non-forced sync can clear the spinner for a still-in-progress
+            // forced (pull-to-refresh) one.
+            if (force) isRefreshing = false
         }
     }
 }

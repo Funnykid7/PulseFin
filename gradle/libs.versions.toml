@@ -14,7 +14,9 @@ coreKtx = "1.19.0"
 lifecycle = "2.11.0"
 activityCompose = "1.13.0"
 composeBom = "2026.06.00"
-composeUi = "1.11.3"
+# Alpha, deliberately: core/designsystem/theme/PulseArtShapes.kt depends on Material3 Expressive's
+# MaterialShapes (Cookie9Sided, Clover4Leaf, etc.), which don't exist in any stable release yet.
+# Accepted tradeoff, not an oversight — revisit once Expressive ships stable.
 material3 = "1.5.0-alpha22"
 navigationCompose = "2.9.8"
 paletteKtx = "1.0.0"
@@ -71,7 +73,7 @@ androidx-activity-compose = { group = "androidx.activity", name = "activity-comp
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 androidx-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
-androidx-ui-text-google-fonts = { module = "androidx.compose.ui:ui-text-google-fonts", version.ref = "composeUi" }
+androidx-ui-text-google-fonts = { group = "androidx.compose.ui", name = "ui-text-google-fonts" }
 androidx-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 androidx-foundation = { group = "androidx.compose.foundation", name = "foundation" }

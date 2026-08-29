@@ -112,6 +112,7 @@
 
     <!-- Search -->
     <string name="search_placeholder">Search songs, albums, artists</string>
+    <string name="search_no_results">No results found.</string>
 
     <!-- Song overflow menu -->
     <string name="song_menu_play_next">Play next</string>
@@ -138,6 +139,7 @@
     <string name="error_network">Connection lost — check your network or server.</string>
     <string name="error_auth">Sign-in expired. Try signing out and back in.</string>
     <string name="error_not_found">This track is no longer available on the server.</string>
+    <string name="error_server">Server error — try again in a moment.</string>
     <string name="error_unknown">Playback error.</string>
     <string name="sleep_timer">Sleep timer</string>
     <string name="sleep_timer_minutes">%1$d minutes</string>
