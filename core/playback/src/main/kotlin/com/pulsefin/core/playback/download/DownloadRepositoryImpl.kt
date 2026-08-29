@@ -2,6 +2,7 @@ package com.pulsefin.core.playback.download
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadManager
 import androidx.media3.exoplayer.offline.DownloadRequest
@@ -27,6 +28,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
+
+private const val TAG = "DownloadRepository"
 
 class DownloadRepositoryImpl(
     private val context: Context,
@@ -68,18 +71,61 @@ class DownloadRepositoryImpl(
         // Run off the main thread — this is a synchronous disk read and DownloadRepositoryImpl is
         // a Koin single that can otherwise be constructed on whichever thread first injects it.
         scope.launch {
-            withContext(dispatchers.io) {
+            // Disk read on IO; the check-and-write below deliberately stays on this launch's own
+            // dispatcher (Main, same as the listener callbacks above) instead of running inside
+            // withContext(dispatchers.io) — doing the "already seen?" check and the updateFrom()
+            // write on IO left a window where a listener update for the same id could land between
+            // them (Main and IO running concurrently), letting this seed's now-stale snapshot
+            // overwrite the fresher listener-driven state. Confined to Main, the two can't interleave.
+            val downloads = withContext(dispatchers.io) {
                 try {
                     downloadManager.downloadIndex.getDownloads().use { cursor ->
-                        while (cursor.moveToNext()) {
-                            val download = cursor.download
-                            if (download.request.id !in listenerUpdatedIds) updateFrom(download)
-                        }
+                        buildList { while (cursor.moveToNext()) add(cursor.download) }
                     }
                 } catch (e: IOException) {
                     // Ignore; _downloads stays empty and will be populated by the listener above.
+                    emptyList()
                 }
             }
+            downloads.forEach { download ->
+                if (download.request.id !in listenerUpdatedIds) updateFrom(download)
+            }
+            migrateTokenBearingDownloads()
+        }
+    }
+
+    /**
+     * One-time-per-item cleanup for downloads persisted by older builds of this app, which baked
+     * the session's auth token into the DownloadRequest's URI (that URI is stored verbatim in
+     * Media3's on-disk, unencrypted download index). Re-adding with a freshly-resolved token-free
+     * URI overwrites just that row's metadata — [DownloadRequest.customCacheKey] is unchanged, so
+     * the already-downloaded audio bytes in the shared cache are reused, not re-fetched. Naturally
+     * self-limiting: once a download's stored URI no longer contains a token, later scans skip it,
+     * so no persisted "migration done" flag is needed.
+     */
+    private suspend fun migrateTokenBearingDownloads() {
+        val staleIds = withContext(dispatchers.io) {
+            try {
+                downloadManager.downloadIndex.getDownloads().use { cursor ->
+                    buildList {
+                        while (cursor.moveToNext()) {
+                            val download = cursor.download
+                            if (download.request.uri.toString().contains("api_key=", ignoreCase = true)) {
+                                add(download.request.id)
+                            }
+                        }
+                    }
+                }
+            } catch (e: IOException) {
+                emptyList()
+            }
+        }
+        staleIds.forEach { songId ->
+            val baseUri = streamUrlResolver.resolveBaseStreamUrl(songId) ?: return@forEach
+            val request = DownloadRequest.Builder(songId, Uri.parse(baseUri)).setCustomCacheKey(songId).build()
+            // Not foreground: this is a silent metadata re-registration for already-complete
+            // downloads, not a new user-visible "downloading" notification.
+            DownloadService.sendAddDownload(context, PulseFinDownloadService::class.java, request, false)
         }
     }
 
@@ -89,7 +135,16 @@ class DownloadRepositoryImpl(
         _downloads.map { it.values.sumOf { d -> d.bytesDownloaded } }
 
     override suspend fun download(song: Song) {
-        val uri = streamUrlResolver.resolveStreamUrl(song.id.value) ?: return
+        // Token-free: this URI is persisted verbatim in Media3's on-disk (unencrypted) download
+        // index, so it must never carry the session's auth token. A fresh token is attached at
+        // actual-fetch time instead, via the ResolvingDataSource wired in PlaybackModule.
+        val uri = streamUrlResolver.resolveBaseStreamUrl(song.id.value)
+        if (uri == null) {
+            // No user-visible error by design (Unit-returning contract) — at least make the
+            // failure observable in logcat instead of a silent no-op with zero trace.
+            Log.w(TAG, "download: couldn't resolve stream URL for song ${song.id.value}")
+            return
+        }
         val request = DownloadRequest.Builder(song.id.value, Uri.parse(uri))
             // Matches the custom cache key used for direct playback (PlaybackController) so a
             // session-token refresh (which changes the resolved URI) doesn't orphan this download.
@@ -102,7 +157,12 @@ class DownloadRepositoryImpl(
         // supervisorScope + per-song runCatching so one song's resolver/service failure doesn't
         // cancel the sibling downloads still in flight.
         supervisorScope {
-            songs.map { song -> async { runCatching { download(song) } } }.awaitAll()
+            songs.map { song ->
+                async {
+                    runCatching { download(song) }
+                        .onFailure { Log.w(TAG, "downloadAll: failed for song ${song.id.value}", it) }
+                }
+            }.awaitAll()
         }
     }
 

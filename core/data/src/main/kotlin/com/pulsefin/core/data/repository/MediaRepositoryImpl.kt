@@ -4,7 +4,6 @@ import com.pulsefin.core.common.dispatchers.AppDispatchers
 import com.pulsefin.core.common.result.PulseResult
 import androidx.room.withTransaction
 import com.pulsefin.core.data.jellyfin.JellyfinApiProvider
-import com.pulsefin.core.data.jellyfin.ensureApiKey
 import com.pulsefin.core.data.local.AlbumDao
 import com.pulsefin.core.data.local.AlbumEntity
 import com.pulsefin.core.data.local.ArtistDao
@@ -25,13 +24,17 @@ import com.pulsefin.core.domain.model.Playlist
 import com.pulsefin.core.domain.model.Song
 import com.pulsefin.core.domain.repository.MediaRepository
 import com.pulsefin.core.domain.repository.SearchResults
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.job
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -88,7 +91,14 @@ class MediaRepositoryImpl(
     private val _lastSyncError = MutableStateFlow<Throwable?>(null)
     override fun observeLastSyncError(): Flow<Throwable?> = _lastSyncError.asStateFlow()
 
-    override fun resetSyncState() {
+    // The network fetch + Room transaction in refreshLibrary() runs as a child of this scope
+    // (not the caller's own coroutine) specifically so resetSyncState() can cancel a straggling
+    // sync on logout, independent of whichever screen happened to have triggered it.
+    private var refreshScope = CoroutineScope(SupervisorJob() + dispatchers.io)
+
+    override suspend fun resetSyncState() {
+        refreshScope.coroutineContext.job.cancelAndJoin()
+        refreshScope = CoroutineScope(SupervisorJob() + dispatchers.io)
         hasSyncedThisProcess = false
     }
 
@@ -105,42 +115,84 @@ class MediaRepositoryImpl(
         songDao.observeFavoriteIds().map { it.toSet() }
 
     override suspend fun refreshLibrary(force: Boolean): PulseResult<Unit> = withContext(dispatchers.io) {
-        val result = PulseResult.runCatchingResult {
+        // A deduped no-op isn't a real sync attempt, so it shouldn't clear a real prior error —
+        // only overwrite _lastSyncError below when this call actually tried to sync.
+        var attemptedSync = false
+        val result = apiResult {
             refreshMutex.withLock {
                 // Dedupe the auto-sync the three tabs each kick off; pull-to-refresh forces it.
                 if (hasSyncedThisProcess && !force) return@withLock
+                attemptedSync = true
                 val api = requireApi()
-                coroutineScope {
-                    val songsDeferred = async { fetchAllItems(api, BaseItemKind.AUDIO).map { it.toSong(api) } }
-                    val albumsDeferred = async { fetchAllItems(api, BaseItemKind.MUSIC_ALBUM).map { it.toAlbum(api) } }
-                    val artistsDeferred = async { fetchAllItems(api, BaseItemKind.MUSIC_ARTIST).map { it.toArtist(api) } }
-                    val playlistsDeferred = async {
-                        fetchAllItems(api, BaseItemKind.PLAYLIST).map { async { it.toPlaylist(api) } }.awaitAll()
+                // Runs as a child of refreshScope, not this call's own coroutine, so
+                // resetSyncState() can cancel a straggling sync on logout — even after whichever
+                // screen originally triggered it has moved on — before it can write stale data
+                // into a just-wiped Room database.
+                refreshScope.async {
+                    // A malformed item (e.g. an enum value from a newer server than this pinned
+                    // SDK understands) fails that whole page's decode, not just one item — so
+                    // isolation happens per type, not per item: supervisorScope keeps one type's
+                    // failure from cancelling the other three's already-in-flight fetches, and
+                    // runCatching means a failed type simply keeps its last-synced Room data
+                    // instead of every type's fetch being cancelled and nothing committing.
+                    var firstFailure: Throwable? = null
+                    supervisorScope {
+                        val songsDeferred = async {
+                            runCatching { fetchAllItems(api, BaseItemKind.AUDIO).map { it.toSong(api).toEntity() } }
+                        }
+                        val albumsDeferred = async {
+                            runCatching { fetchAllItems(api, BaseItemKind.MUSIC_ALBUM).map { it.toAlbum(api).toEntity() } }
+                        }
+                        val artistsDeferred = async {
+                            runCatching { fetchAllItems(api, BaseItemKind.MUSIC_ARTIST).map { it.toArtist(api).toEntity() } }
+                        }
+                        val playlistsDeferred = async {
+                            runCatching {
+                                fetchAllItems(api, BaseItemKind.PLAYLIST)
+                                    .map { async { it.toPlaylist(api) } }
+                                    .awaitAll()
+                                    .map { it.toEntity() }
+                            }
+                        }
+                        val songsResult = songsDeferred.await()
+                        val albumsResult = albumsDeferred.await()
+                        val artistsResult = artistsDeferred.await()
+                        val playlistsResult = playlistsDeferred.await()
+                        // One outer transaction spanning every table this pass actually has fresh
+                        // data for — each replaceAll is itself @Transaction, but without this
+                        // wrapper a crash/process-death partway through could leave Room with a
+                        // mix of freshly-synced and stale tables.
+                        database.withTransaction {
+                            songsResult.onSuccess { songs ->
+                                songDao.replaceAll(songs)
+                                // Evict mutex entries for songs no longer in the library — one
+                                // Mutex per distinct song ID ever toggled would otherwise sit in
+                                // this map for the rest of the process's lifetime.
+                                val liveIds = songs.mapTo(mutableSetOf()) { it.id }
+                                favoriteMutexes.keys.retainAll(liveIds)
+                            }.onFailure { firstFailure = firstFailure ?: it }
+                            albumsResult.onSuccess { albumDao.replaceAll(it) }.onFailure { firstFailure = firstFailure ?: it }
+                            artistsResult.onSuccess { artistDao.replaceAll(it) }.onFailure { firstFailure = firstFailure ?: it }
+                            playlistsResult.onSuccess { playlistDao.replaceAll(it) }.onFailure { firstFailure = firstFailure ?: it }
+                        }
                     }
-                    val songs = songsDeferred.await().map { it.toEntity() }
-                    val albums = albumsDeferred.await().map { it.toEntity() }
-                    val artists = artistsDeferred.await().map { it.toEntity() }
-                    val playlists = playlistsDeferred.await().map { it.toEntity() }
-                    // One outer transaction spanning all four tables — each replaceAll is itself
-                    // @Transaction, but without this wrapper a crash/process-death partway through
-                    // could leave Room with a mix of freshly-synced and stale tables.
-                    database.withTransaction {
-                        songDao.replaceAll(songs)
-                        albumDao.replaceAll(albums)
-                        artistDao.replaceAll(artists)
-                        playlistDao.replaceAll(playlists)
-                    }
-                }
+                    // Surface a failure (so _lastSyncError/hasSyncedThisProcess reflect it,
+                    // prompting a retry next sync) only after the successful types' fresh data is
+                    // already durably committed above — this must not roll that back.
+                    firstFailure?.let { throw it }
+                }.await()
                 hasSyncedThisProcess = true
             }
         }
-        _lastSyncError.value = (result as? PulseResult.Failure)?.error
+        if (attemptedSync) {
+            _lastSyncError.value = (result as? PulseResult.Failure)?.error
+        }
         result
     }
 
     override suspend fun songsForAlbum(albumId: String): PulseResult<List<Song>> =
         withContext(dispatchers.io) {
-            PulseResult.runCatchingResult {
+            apiResult {
                 val api = requireApi()
                 api.itemsApi.getItems(
                     GetItemsRequest(
@@ -154,7 +206,7 @@ class MediaRepositoryImpl(
 
     override suspend fun albumsForArtist(artistId: String): PulseResult<List<Album>> =
         withContext(dispatchers.io) {
-            PulseResult.runCatchingResult {
+            apiResult {
                 val api = requireApi()
                 api.itemsApi.getItems(
                     GetItemsRequest(
@@ -169,9 +221,9 @@ class MediaRepositoryImpl(
 
     override suspend fun search(query: String): PulseResult<SearchResults> =
         withContext(dispatchers.io) {
-            PulseResult.runCatchingResult {
+            apiResult {
                 if (query.isBlank()) {
-                    return@runCatchingResult SearchResults(emptyList(), emptyList(), emptyList())
+                    return@apiResult SearchResults(emptyList(), emptyList(), emptyList())
                 }
                 val api = requireApi()
                 val items = api.itemsApi.getItems(
@@ -201,8 +253,14 @@ class MediaRepositoryImpl(
             // already-confirmed successful write.
             favoriteMutexes.getOrPut(songId) { Mutex() }.withLock {
                 // Optimistic: update Room first so the heart flips instantly, then tell the server.
-                songDao.setFavorite(songId, favorite)
-                val result = PulseResult.runCatchingResult {
+                // Wrapped (unlike a plain call) so a throw here — e.g. disk full — surfaces as
+                // PulseResult.Failure like the rest of this repository's contract, instead of
+                // propagating uncaught past this function's declared PulseResult return type.
+                val optimisticWrite = runCatching { songDao.setFavorite(songId, favorite) }
+                if (optimisticWrite.isFailure) {
+                    return@withLock PulseResult.Failure(optimisticWrite.exceptionOrNull()!!)
+                }
+                val result = apiResult {
                     val api = requireApi()
                     val itemId = UUID.fromString(songId)
                     if (favorite) api.userLibraryApi.markFavoriteItem(itemId = itemId)
@@ -210,7 +268,13 @@ class MediaRepositoryImpl(
                     Unit
                 }
                 // Roll back the optimistic write on failure so Room doesn't keep lying to the user.
+                // On success, re-assert it instead: a concurrent refreshLibrary()'s wholesale
+                // songDao.replaceAll(songs) can land between the optimistic write above and here,
+                // silently clobbering this toggle with a server snapshot from before the mark/unmark
+                // call above was applied server-side. Still under this song's mutex, so this is the
+                // final write regardless of when refreshLibrary's replace happened to land.
                 if (result is PulseResult.Failure) songDao.setFavorite(songId, !favorite)
+                else songDao.setFavorite(songId, favorite)
                 result
             }
         }
@@ -220,7 +284,7 @@ class MediaRepositoryImpl(
 
     override suspend fun createPlaylist(name: String, songIds: List<String>): PulseResult<Unit> =
         withContext(dispatchers.io) {
-            PulseResult.runCatchingResult {
+            apiResult {
                 val api = requireApi()
                 val userId = UUID.fromString(requireUserId())
                 val created = api.playlistsApi.createPlaylist(
@@ -239,7 +303,7 @@ class MediaRepositoryImpl(
 
     override suspend fun renamePlaylist(playlistId: String, name: String): PulseResult<Unit> =
         withContext(dispatchers.io) {
-            PulseResult.runCatchingResult {
+            apiResult {
                 val api = requireApi()
                 api.playlistsApi.updatePlaylist(UUID.fromString(playlistId), UpdatePlaylistDto(name = name))
                 upsertSinglePlaylist(api, playlistId)
@@ -248,7 +312,7 @@ class MediaRepositoryImpl(
 
     override suspend fun deletePlaylist(playlistId: String): PulseResult<Unit> =
         withContext(dispatchers.io) {
-            PulseResult.runCatchingResult {
+            apiResult {
                 requireApi().libraryApi.deleteItem(UUID.fromString(playlistId))
                 playlistDao.delete(playlistId)
             }
@@ -256,7 +320,7 @@ class MediaRepositoryImpl(
 
     override suspend fun songsForPlaylist(playlistId: String): PulseResult<List<Song>> =
         withContext(dispatchers.io) {
-            PulseResult.runCatchingResult {
+            apiResult {
                 val api = requireApi()
                 fetchAllPlaylistItems(api, playlistId).map { item ->
                     item.toSong(api).copy(playlistItemId = item.playlistItemId)
@@ -266,7 +330,7 @@ class MediaRepositoryImpl(
 
     override suspend fun addToPlaylist(playlistId: String, songIds: List<String>): PulseResult<Unit> =
         withContext(dispatchers.io) {
-            PulseResult.runCatchingResult {
+            apiResult {
                 val api = requireApi()
                 val userId = UUID.fromString(requireUserId())
                 api.playlistsApi.addItemToPlaylist(
@@ -280,7 +344,7 @@ class MediaRepositoryImpl(
 
     override suspend fun removeFromPlaylist(playlistId: String, entryIds: List<String>): PulseResult<Unit> =
         withContext(dispatchers.io) {
-            PulseResult.runCatchingResult {
+            apiResult {
                 val api = requireApi()
                 api.playlistsApi.removeItemFromPlaylist(playlistId, entryIds)
                 upsertSinglePlaylist(api, playlistId)
@@ -351,7 +415,7 @@ class MediaRepositoryImpl(
 
     override suspend fun recentlyAdded(limit: Int): PulseResult<List<Album>> =
         withContext(dispatchers.io) {
-            PulseResult.runCatchingResult {
+            apiResult {
                 val api = requireApi()
                 api.itemsApi.getItems(
                     GetItemsRequest(
@@ -367,7 +431,7 @@ class MediaRepositoryImpl(
 
     override suspend fun lyrics(songId: String): PulseResult<Lyrics> =
         withContext(dispatchers.io) {
-            PulseResult.runCatchingResult {
+            apiResult {
                 val api = requireApi()
                 val dto = api.lyricsApi.getLyrics(itemId = UUID.fromString(songId)).content
                 Lyrics(
@@ -397,6 +461,16 @@ class MediaRepositoryImpl(
     override suspend fun clearRecentSearches() = withContext(dispatchers.io) {
         recentSearchDao.clearAll()
     }
+
+    /**
+     * [PulseResult.runCatchingResult] plus 401 detection: a server-side session revocation
+     * (password change, revoked API key, expiry policy) otherwise surfaces as just another
+     * generic Failure, with nothing ever transitioning AuthState away from LoggedIn.
+     */
+    private suspend inline fun <T> apiResult(block: () -> T): PulseResult<T> =
+        PulseResult.runCatchingResult(block).also { result ->
+            if (result is PulseResult.Failure) apiProvider.invalidateSessionIfUnauthorized(result.error)
+        }
 
     private suspend fun requireApi(): ApiClient = apiProvider.api() ?: error("Not signed in")
 
@@ -434,7 +508,10 @@ class MediaRepositoryImpl(
             if (items.isEmpty()) break
             out += items
             if (out.size >= page.totalRecordCount) break
-            startIndex += pageSize
+            // Advance by what was actually returned, not the requested page size — a
+            // server-enforced cap or a transient short page would otherwise permanently skip
+            // whatever items sat between this response's end and the next full-size page start.
+            startIndex += items.size
         }
         return out
     }
@@ -461,7 +538,10 @@ class MediaRepositoryImpl(
             if (items.isEmpty()) break
             out += items
             if (out.size >= page.totalRecordCount) break
-            startIndex += pageSize
+            // Advance by what was actually returned, not the requested page size — a
+            // server-enforced cap or a transient short page would otherwise permanently skip
+            // whatever items sat between this response's end and the next full-size page start.
+            startIndex += items.size
         }
         return out
     }
@@ -515,12 +595,13 @@ private fun BaseItemDto.artworkUrl(api: ApiClient): String? = runCatching {
     // query param so Coil's URL-keyed cache can't serve stale bytes for a different item that
     // happens to reuse the same id (observed with recreated same-named playlists).
     val tag = imageTags?.get(ImageType.PRIMARY) ?: return@runCatching null
-    // Store the base URL; callers append the size they need via sizedArtUrl (tiny for list
-    // thumbnails, larger for the Now Playing hero) so lists stay cheap to scroll.
-    val url = api.imageApi.getItemImageUrl(itemId = id, imageType = ImageType.PRIMARY, tag = tag)
-    // Servers requiring authenticated image access 404 without a token — the SDK doesn't add
-    // one to this URL by itself (unlike getAudioStreamUrl, which StreamUrlResolverImpl patches).
-    ensureApiKey(url, api.accessToken)
+    // Store the base URL only — deliberately WITHOUT an api_key, since this value is persisted
+    // verbatim to Room (and, via the playback queue, to on-disk queue state). Servers requiring
+    // authenticated image access 404 without a token, so callers that actually fetch the image
+    // (Coil, the playback MediaItem) attach one fresh via StreamUrlResolver.resolveArtworkUrl.
+    // Callers also append the size they need via sizedArtUrl (tiny for list thumbnails, larger
+    // for the Now Playing hero) so lists stay cheap to scroll.
+    api.imageApi.getItemImageUrl(itemId = id, imageType = ImageType.PRIMARY, tag = tag)
 }.getOrNull()
 
 // --- domain <-> Room entity ---
