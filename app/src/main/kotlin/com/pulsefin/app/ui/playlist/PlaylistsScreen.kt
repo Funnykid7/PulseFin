@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -241,7 +242,7 @@ private fun PlaylistCard(playlist: Playlist, onClick: () -> Unit, modifier: Modi
             modifier = Modifier.padding(top = 6.dp),
         )
         Text(
-            text = stringResource(R.string.playlist_song_count, playlist.songCount),
+            text = pluralStringResource(R.plurals.playlist_song_count, playlist.songCount, playlist.songCount),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

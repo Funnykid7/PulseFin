@@ -153,8 +153,23 @@ fun YourMixScreen(
             item(key = "hero") {
                 YourMixHero(
                     clusterArt = clusterArt,
+                    canShuffle = allSongs.isNotEmpty(),
                     onShufflePlay = viewModel::onShufflePlay,
                 )
+            }
+
+            // A brand-new account (this is the default/first tab) otherwise showed only the hero
+            // and an always-enabled Shuffle button that silently no-oped — nothing explaining the
+            // library is empty rather than broken.
+            if (recent.isEmpty() && favorites.isEmpty() && allSongs.isEmpty()) {
+                item(key = "empty") {
+                    Box(Modifier.fillParentMaxWidth().padding(vertical = 48.dp), Alignment.Center) {
+                        Text(
+                            stringResource(R.string.home_empty),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
 
             if (recent.isNotEmpty()) {
@@ -199,7 +214,7 @@ fun YourMixScreen(
 }
 
 @Composable
-private fun YourMixHero(clusterArt: List<String>, onShufflePlay: () -> Unit) {
+private fun YourMixHero(clusterArt: List<String>, canShuffle: Boolean, onShufflePlay: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -223,6 +238,7 @@ private fun YourMixHero(clusterArt: List<String>, onShufflePlay: () -> Unit) {
             val playInteraction = remember { MutableInteractionSource() }
             FilledIconButton(
                 onClick = onShufflePlay,
+                enabled = canShuffle,
                 modifier = Modifier
                     .size(56.dp)
                     .pressScale(playInteraction),

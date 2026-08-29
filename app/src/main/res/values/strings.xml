@@ -100,7 +100,10 @@
     <string name="playlist_rename_title">Rename playlist</string>
     <string name="playlist_fallback_name">Playlist</string>
     <string name="playlist_load_error">Couldn\'t load playlist</string>
-    <string name="playlist_song_count">%1$d songs</string>
+    <plurals name="playlist_song_count">
+        <item quantity="one">%1$d song</item>
+        <item quantity="other">%1$d songs</item>
+    </plurals>
 
     <!-- Albums / Artists -->
     <string name="albums_empty">No albums yet — pull to refresh.</string>
