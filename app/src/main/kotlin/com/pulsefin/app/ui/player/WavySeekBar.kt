@@ -23,7 +23,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.pulsefin.app.R
 import com.pulsefin.app.ui.components.HapticEffect
 import com.pulsefin.app.ui.components.LocalHapticsEnabled
 import com.pulsefin.app.ui.components.performHaptic
@@ -53,12 +61,35 @@ fun WavySeekBar(
     val fraction = scrub ?: playbackFraction
     val view = LocalView.current
     val hapticsEnabled = LocalHapticsEnabled.current
+    val seekBarDescription = stringResource(R.string.cd_seek_bar)
+    val seekForwardLabel = stringResource(R.string.action_seek_forward)
+    val seekBackwardLabel = stringResource(R.string.action_seek_backward)
 
     Column(modifier = modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp)
+                // detectTapGestures/detectHorizontalDragGestures below are unreachable via
+                // TalkBack (it intercepts single-finger drags for its own navigation), so this is
+                // the app's only seek control that needs an accessible alternative to reach every
+                // position, not just fixed-step nudges.
+                .semantics(mergeDescendants = true) {
+                    contentDescription = seekBarDescription
+                    if (durationMs > 0) {
+                        progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f)
+                        customActions = listOf(
+                            CustomAccessibilityAction(seekForwardLabel) {
+                                onSeek((positionMs + SEEK_STEP_MS).coerceAtMost(durationMs))
+                                true
+                            },
+                            CustomAccessibilityAction(seekBackwardLabel) {
+                                onSeek((positionMs - SEEK_STEP_MS).coerceAtLeast(0L))
+                                true
+                            },
+                        )
+                    }
+                }
                 .pointerInput(durationMs) {
                     detectTapGestures { offset ->
                         if (durationMs > 0) {
@@ -115,10 +146,12 @@ fun WavySeekBar(
     }
 }
 
+private const val SEEK_STEP_MS = 10_000L
+
 internal fun formatTime(ms: Long): String {
     if (ms <= 0) return "0:00"
     val totalSeconds = ms / 1000
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
-    return "%d:%02d".format(minutes, seconds)
+    return "%d:%02d".format(java.util.Locale.US, minutes, seconds)
 }

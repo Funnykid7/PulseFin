@@ -5,8 +5,12 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.preferencesDataStore
 import com.pulsefin.core.common.dispatchers.AppDispatchers
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
 
 private val Context.dataStore by preferencesDataStore(name = "pulsefin_settings")
@@ -36,6 +40,19 @@ class SettingsStore(context: Context, private val dispatchers: AppDispatchers) {
             dynamicColor = prefs[Keys.DYNAMIC_COLOR] ?: defaults.dynamicColor,
             hapticsEnabled = prefs[Keys.HAPTICS_ENABLED] ?: defaults.hapticsEnabled,
         )
+    }
+
+    // Synchronous last-known value, for seeding collectAsStateWithLifecycle's initialValue so a
+    // config change (rotation) doesn't flash the Settings() default for a frame before the real
+    // DataStore value re-arrives. Mirrors every emission of `settings` above; may briefly still be
+    // the default immediately after process start, before the first DataStore read completes.
+    @Volatile var currentSettings: Settings = Settings()
+        private set
+
+    private val mirrorScope = CoroutineScope(SupervisorJob() + dispatchers.io)
+
+    init {
+        settings.onEach { currentSettings = it }.launchIn(mirrorScope)
     }
 
     suspend fun setDarkTheme(enabled: Boolean): Unit = withContext(dispatchers.io) {

@@ -481,6 +481,12 @@ private val tabRoutes: List<String> = listOf(
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.isForwardTabSwitch(): Boolean {
     val fromIndex = tabRoutes.indexOf(initialState.destination.route.orEmpty())
     val toIndex = tabRoutes.indexOf(targetState.destination.route.orEmpty())
+    // indexOf returns -1 for a non-tab route (Settings, Search, a detail screen, ...). Unindexed
+    // on either side always reads as forward — a tab pushing into a detail screen, or popping
+    // back out of one, should always advance/retreat cleanly rather than the two screens
+    // crossing over each other (which is what a bare toIndex >= fromIndex gives when toIndex is
+    // the -1 fallback for a real, non-negative fromIndex).
+    if (fromIndex == -1 || toIndex == -1) return true
     return toIndex >= fromIndex
 }
 

@@ -25,7 +25,6 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.pulsefin.app.ui.components.LocalHapticsEnabled
 import com.pulsefin.app.ui.root.PulseFinRoot
-import com.pulsefin.core.data.local.Settings
 import com.pulsefin.core.data.local.SettingsStore
 import com.pulsefin.core.designsystem.theme.PulseFinTheme
 import com.pulsefin.core.playback.controller.PlaybackController
@@ -49,7 +48,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             val settingsStore: SettingsStore = koinInject()
-            val settings by settingsStore.settings.collectAsStateWithLifecycle(initialValue = Settings())
+            val settings by settingsStore.settings.collectAsStateWithLifecycle(
+                initialValue = settingsStore.currentSettings,
+            )
             val view = LocalView.current
             SideEffect {
                 val insetsController = WindowInsetsControllerCompat(window, view)

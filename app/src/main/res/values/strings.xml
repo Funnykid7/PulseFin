@@ -48,6 +48,9 @@
     <string name="cd_repeat">Repeat</string>
     <string name="cd_downloaded">Downloaded</string>
     <string name="cd_download_failed">Download failed</string>
+    <string name="cd_seek_bar">Playback position</string>
+    <string name="action_seek_forward">Seek forward 10 seconds</string>
+    <string name="action_seek_backward">Seek back 10 seconds</string>
     <string name="state_pause">Pause</string>
 
     <!-- Bottom nav tabs (also reused for search section headers) -->

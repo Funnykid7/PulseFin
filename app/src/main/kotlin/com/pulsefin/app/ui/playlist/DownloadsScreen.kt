@@ -15,7 +15,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,12 +32,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.pulsefin.app.R
+import com.pulsefin.app.ui.components.DownloadStateIndicator
 import com.pulsefin.app.ui.components.MediaRow
 import com.pulsefin.app.ui.components.bouncyClickable
 import com.pulsefin.app.ui.components.pressScale
@@ -57,11 +58,17 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
+/** A row on the Downloads screen: a song paired with where its download currently stands. */
+data class DownloadEntry(val song: Song, val state: DownloadState)
+
 /**
  * The "Downloads" pseudo-playlist: not a real server playlist (no [MediaRepository.observePlaylists]
- * entry, no playlist id) — just a view over completed downloads. Sourced from [DownloadDao] rather
- * than [MediaRepository.observeSongs] so a song stays listed here even if it's later removed from
- * the server library while still downloaded on-device.
+ * entry, no playlist id) — just a view over this device's downloads, in every state but [DownloadState.NONE]
+ * (queued/downloading/completed/failed all surface here, via [DownloadStateIndicator] per row — this
+ * is the one screen dedicated to browsing them, so a completed-only filter would otherwise hide
+ * everything currently in progress or that failed). Sourced from [DownloadDao] rather than
+ * [MediaRepository.observeSongs] so a song stays listed here even if it's later removed from the
+ * server library while still downloaded on-device.
  */
 class DownloadsViewModel(
     private val downloadDao: DownloadDao,
@@ -70,17 +77,17 @@ class DownloadsViewModel(
     private val downloadRepository: DownloadRepository,
 ) : ViewModel() {
 
-    val songs: StateFlow<List<Song>> = combine(
+    val entries: StateFlow<List<DownloadEntry>> = combine(
         downloadDao.observeAll(),
         mediaRepository.observeSongs(),
     ) { downloads, librarySongs ->
         val songsById = librarySongs.associateBy { it.id.value }
         downloads
-            .filter { it.state == DownloadState.COMPLETED.name }
+            .filter { it.state != DownloadState.NONE.name }
             .map { entity ->
                 // Prefer the live library copy (duration, album); fall back to the download's own
                 // denormalized metadata for a song that's since been removed from the server.
-                songsById[entity.songId] ?: Song(
+                val song = songsById[entity.songId] ?: Song(
                     id = MediaId(entity.songId),
                     title = entity.title,
                     albumName = "",
@@ -88,17 +95,20 @@ class DownloadsViewModel(
                     durationMs = 0L,
                     artworkUrl = entity.artworkUrl,
                 )
+                DownloadEntry(song, DownloadState.valueOf(entity.state))
             }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun playAll() = viewModelScope.launch {
-        if (songs.value.isNotEmpty()) playbackController.play(songs.value, 0)
+        val songs = entries.value.map { it.song }
+        if (songs.isNotEmpty()) playbackController.play(songs, 0)
     }
 
     // Resolve by id against the current list at click time rather than a captured index.
     fun play(song: Song) = viewModelScope.launch {
-        val index = songs.value.indexOfFirst { it.id.value == song.id.value }
-        if (index >= 0) playbackController.play(songs.value, index)
+        val songs = entries.value.map { it.song }
+        val index = songs.indexOfFirst { it.id.value == song.id.value }
+        if (index >= 0) playbackController.play(songs, index)
     }
 
     fun removeDownload(songId: String) = viewModelScope.launch { downloadRepository.remove(songId) }
@@ -112,7 +122,7 @@ fun DownloadsScreen(
     onBack: () -> Unit,
     viewModel: DownloadsViewModel = koinViewModel(),
 ) {
-    val songs by viewModel.songs.collectAsStateWithLifecycle()
+    val entries by viewModel.entries.collectAsStateWithLifecycle()
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -146,7 +156,7 @@ fun DownloadsScreen(
                             style = MaterialTheme.typography.headlineSmall,
                         )
                         Text(
-                            stringResource(R.string.playlist_song_count, songs.size),
+                            pluralStringResource(R.plurals.playlist_song_count, entries.size, entries.size),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -164,7 +174,7 @@ fun DownloadsScreen(
                         }
                     }
                 }
-                if (songs.isEmpty()) {
+                if (entries.isEmpty()) {
                     item(contentType = "status") {
                         Box(modifier = Modifier.fillParentMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
                             Text(stringResource(R.string.playlist_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -172,10 +182,11 @@ fun DownloadsScreen(
                     }
                 } else {
                     items(
-                        songs,
-                        key = { it.id.value },
+                        entries,
+                        key = { it.song.id.value },
                         contentType = { "song" },
-                    ) { song ->
+                    ) { entry ->
+                        val song = entry.song
                         MediaRow(
                             title = song.title,
                             imageModel = sizedArtUrl(song.artworkUrl, 180),
@@ -188,7 +199,7 @@ fun DownloadsScreen(
                             },
                             trailing = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.DownloadDone, contentDescription = null)
+                                    DownloadStateIndicator(entry.state)
                                     IconButton(onClick = { viewModel.removeDownload(song.id.value) }) {
                                         Icon(
                                             Icons.Filled.RemoveCircleOutline,
