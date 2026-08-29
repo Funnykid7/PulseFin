@@ -47,6 +47,10 @@ materialColorUtilities = "2.1.1"
 # Test
 junit = "4.13.2"
 
+# Forced transitive version — AGP's Unified Test Platform tooling pulls vulnerable Netty
+# releases via grpc-netty; not shipped in the app, but pinned to silence Dependabot alerts.
+netty = "4.1.136.Final"
+
 # Baseline Profile / macrobenchmark
 benchmark = "1.5.0-alpha07"
 baselineprofile = "1.5.0-alpha07"
