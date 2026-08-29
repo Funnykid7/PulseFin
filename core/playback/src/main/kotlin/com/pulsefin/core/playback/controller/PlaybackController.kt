@@ -58,6 +58,7 @@ sealed interface PlaybackError {
     data object Network : PlaybackError
     data object Auth : PlaybackError
     data object NotFound : PlaybackError
+    data object ServerError : PlaybackError
     data object Unknown : PlaybackError
 }
 
@@ -72,6 +73,11 @@ private fun PlaybackException.toDomainError(): PlaybackError {
         httpCause?.responseCode == 401 -> PlaybackError.Auth
         errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND ||
             httpCause?.responseCode == 404 -> PlaybackError.NotFound
+        // Distinct from genuine connectivity failure below: a 403 (item access revoked) or 5xx
+        // (server-side failure) both previously fell through to the generic Network branch,
+        // showing a "check your connection" message when the network was actually fine.
+        httpCause?.responseCode == 403 || (httpCause?.responseCode ?: 0) in 500..599 ->
+            PlaybackError.ServerError
         errorCode in NETWORK_ERROR_CODES || errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ->
             PlaybackError.Network
         else -> PlaybackError.Unknown
@@ -123,6 +129,11 @@ class PlaybackController(
     val sleepRemainingMs: StateFlow<Long?> = _sleepRemainingMs.asStateFlow()
     private var sleepJob: Job? = null
 
+    // True only while "sleep at track end" (as opposed to a plain minutes-based timer) is armed —
+    // gates the listener's re-arm-on-track-transition logic above so a minutes-based timer isn't
+    // affected by track changes.
+    private var sleepAtTrackEndActive = false
+
     private var controller: MediaController? = null
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var ticking = false
@@ -132,14 +143,21 @@ class PlaybackController(
             updateState(player)
             updateQueue(player)
             _positionMs.value = player.currentPosition.coerceAtLeast(0L)
+            // "Sleep at track end" targets whichever track is playing *now* — without this, a
+            // skip to a different track mid-countdown leaves the original track's stale
+            // remaining-time still counting down against the new track.
+            if (sleepAtTrackEndActive && events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)) {
+                armSleepTimerAtTrackEnd(player)
+            }
         }
     }
 
     private val controllerListener = object : MediaController.Listener {
         override fun onDisconnected(controller: MediaController) {
-            // The session died under us (e.g. the service was killed). Drop both the controller
-            // and its future so the next withController() call reconnects instead of calling
-            // methods on a stale, disconnected controller.
+            // The session died under us (e.g. the service was killed). Release this controller's
+            // own resources, then drop both it and its future so the next withController() call
+            // builds and connects a fresh one instead of calling methods on a stale controller.
+            controller.release()
             this@PlaybackController.controller = null
             this@PlaybackController.controllerFuture = null
         }
@@ -185,9 +203,16 @@ class PlaybackController(
                 // silently resuming playback on the wrong track.
                 val currentMediaId = current.currentMediaItem?.mediaId
                 val currentPositionMs = current.currentPosition.coerceAtLeast(0L)
-                val refreshed = (0 until current.mediaItemCount).mapNotNull { i ->
-                    val item = current.getMediaItemAt(i)
-                    streamUrlResolver.resolveStreamUrl(item.mediaId)?.let { item.withRefreshedUri(it) }
+                // Concurrent, like play() — a sequential suspend loop here yields the main thread
+                // between items, leaving a window for a synchronous removeFromQueue/moveQueueItem
+                // call to shrink the queue mid-loop (causing getMediaItemAt to throw, or the final
+                // replaceMediaItems below to silently reorder/drop items against a moved-on queue).
+                val refreshed = coroutineScope {
+                    (0 until current.mediaItemCount)
+                        .map { i -> current.getMediaItemAt(i) }
+                        .map { item -> async { streamUrlResolver.resolveStreamUrl(item.mediaId)?.let { item.withRefreshedUri(it) } } }
+                        .awaitAll()
+                        .filterNotNull()
                 }
                 if (refreshed.isNotEmpty()) {
                     val resolvedIndex = refreshed.indexOfFirst { it.mediaId == currentMediaId }
@@ -239,6 +264,19 @@ class PlaybackController(
     // intent locally keeps rapid alternating taps alternating regardless of that lag.
     private var lastCommandedPlaying: Boolean? = null
 
+    /**
+     * Stops playback and clears the queue entirely — for logout, where the app must not keep
+     * playing audio/showing a notification for a session that was just wiped. Clearing the queue
+     * also persists the now-empty state via the same [persistQueueState] path updateQueue()
+     * already triggers off the resulting Player.Listener event, so nothing resumes on relaunch.
+     */
+    fun stop() {
+        withController { controller ->
+            controller.stop()
+            controller.clearMediaItems()
+        }
+    }
+
     fun togglePlayPause() {
         withController { controller ->
             val currentlyPlaying = lastCommandedPlaying ?: controller.isPlaying
@@ -276,18 +314,25 @@ class PlaybackController(
     }
 
     /** Auto-pause after [minutes]. Replaces any running timer. */
-    fun startSleepTimer(minutes: Int) = startSleepTimerFor(minutes * 60_000L)
+    fun startSleepTimer(minutes: Int) {
+        sleepAtTrackEndActive = false
+        startSleepTimerFor(minutes * 60_000L)
+    }
 
-    /** Auto-pause when the current track finishes. */
+    /** Auto-pause when the current track finishes — re-arms itself if the track changes. */
     fun startSleepTimerAtTrackEnd() {
-        withController { c ->
-            val duration = c.duration
-            if (duration == C.TIME_UNSET || duration <= 0L) return@withController
-            startSleepTimerFor((duration - c.currentPosition).coerceAtLeast(0L))
-        }
+        sleepAtTrackEndActive = true
+        withController { c -> armSleepTimerAtTrackEnd(c) }
+    }
+
+    private fun armSleepTimerAtTrackEnd(player: Player) {
+        val duration = player.duration
+        if (duration == C.TIME_UNSET || duration <= 0L) return
+        startSleepTimerFor((duration - player.currentPosition).coerceAtLeast(0L))
     }
 
     fun cancelSleepTimer() {
+        sleepAtTrackEndActive = false
         sleepJob?.cancel()
         sleepJob = null
         _sleepRemainingMs.value = null
@@ -310,6 +355,7 @@ class PlaybackController(
                 controller?.pause()
                 _sleepRemainingMs.value = null
                 sleepJob = null
+                sleepAtTrackEndActive = false
             }
         }
     }
@@ -352,11 +398,17 @@ class PlaybackController(
     }
 
     fun moveQueueItem(fromIndex: Int, toIndex: Int) {
-        withController { it.moveMediaItem(fromIndex, toIndex) }
+        withController { controller ->
+            if (fromIndex in 0 until controller.mediaItemCount && toIndex in 0 until controller.mediaItemCount) {
+                controller.moveMediaItem(fromIndex, toIndex)
+            }
+        }
     }
 
     fun removeFromQueue(index: Int) {
-        withController { it.removeMediaItem(index) }
+        withController { controller ->
+            if (index in 0 until controller.mediaItemCount) controller.removeMediaItem(index)
+        }
     }
 
     private fun updateQueue(player: Player) {
@@ -436,7 +488,11 @@ private suspend fun Song.toMediaItem(resolver: StreamUrlResolver): MediaItem? {
                 .setTitle(title)
                 .setArtist(artistName)
                 .setAlbumTitle(albumName)
-                .apply { sizedArtUrl(artworkUrl, 720)?.let { setArtworkUri(Uri.parse(it)) } }
+                .apply {
+                    sizedArtUrl(artworkUrl, 720)
+                        ?.let { resolver.resolveArtworkUrl(it) }
+                        ?.let { setArtworkUri(Uri.parse(it)) }
+                }
                 .build(),
         )
         .build()
