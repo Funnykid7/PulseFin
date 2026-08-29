@@ -111,13 +111,17 @@ fun ArtistDetailScreen(
             val phase = when {
                 state.isLoading -> 0
                 state.error != null -> 1
-                else -> 2
+                state.albums.isEmpty() -> 2
+                else -> 3
             }
             Crossfade(targetState = phase, label = "artistDetailContent") { p ->
                 when (p) {
                     0 -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
                     1 -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                         Text(state.error ?: stringResource(R.string.artist_load_error), color = MaterialTheme.colorScheme.error)
+                    }
+                    2 -> Box(Modifier.fillMaxSize(), Alignment.Center) {
+                        Text(stringResource(R.string.albums_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     else -> LazyVerticalGrid(
                         columns = GridCells.Fixed(2),

@@ -197,6 +197,11 @@ fun AlbumDetailScreen(
                                 )
                             }
                         }
+                        state.tracks.isEmpty() -> item(contentType = "status") {
+                            Box(modifier = Modifier.fillParentMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
+                                Text(stringResource(R.string.playlist_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                         else -> itemsIndexed(
                             state.tracks,
                             key = { _, s -> s.id.value },

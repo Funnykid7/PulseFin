@@ -26,7 +26,6 @@ securityCrypto = "1.1.0"
 
 # Kotlin libs
 coroutines = "1.11.0"
-kotlinxCollectionsImmutable = "0.5.0"
 
 # DI
 koin = "4.1.0"
@@ -93,7 +92,6 @@ androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref =
 # Kotlin
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
-kotlinx-collections-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable", version.ref = "kotlinxCollectionsImmutable" }
 
 # DI (Koin)
 koin-bom = { module = "io.insert-koin:koin-bom", version.ref = "koin" }

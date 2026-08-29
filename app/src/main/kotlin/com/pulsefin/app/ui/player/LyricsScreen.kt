@@ -70,6 +70,10 @@ fun LyricsScreen(
     var loading by remember { mutableStateOf(true) }
     LaunchedEffect(mediaId) {
         loading = true
+        // Otherwise the Synced/Static toggle below (driven by `current?.isSynced`) keeps reflecting
+        // the previous track's lyrics for the whole fetch, since `loading` gates the main content
+        // area but not this toggle.
+        lyrics = null
         lyrics = mediaId?.let { id ->
             when (val r = repository.lyrics(id)) {
                 is PulseResult.Success -> r.data
