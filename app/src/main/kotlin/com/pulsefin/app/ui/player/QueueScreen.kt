@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -90,6 +92,15 @@ fun QueueScreen(
     val hapticsEnabled = LocalHapticsEnabled.current
     var draggedIndex by remember { mutableIntStateOf(-1) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
+
+    // Each row's pointerInput is keyed on (index, queue.size), so a queue mutation from elsewhere
+    // (e.g. another row's swipe-to-dismiss) cancels the drag gesture's coroutine without invoking
+    // onDragEnd/onDragCancel, which would otherwise leave this stuck mid-drag — same class of bug,
+    // same fix as WavySeekBar's durationMs-keyed reset.
+    LaunchedEffect(queue.size) {
+        draggedIndex = -1
+        dragOffsetY = 0f
+    }
 
     // The index the dragged row would land on if released right now — used to live-reflow the
     // rows it's crossing over, rather than only snapping the list into place on release.
@@ -237,40 +248,49 @@ fun QueueScreen(
                             titleColor = titleColor,
                             titleWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
                             trailing = {
-                                Icon(
-                                    Icons.Filled.DragHandle,
-                                    contentDescription = stringResource(R.string.cd_reorder),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.pointerInput(index, queue.size) {
-                                        detectDragGesturesAfterLongPress(
-                                            onDragStart = {
-                                                draggedIndex = index
-                                                dragOffsetY = 0f
-                                                // Medium: the start of a drag gesture is a more
-                                                // deliberate engagement than a simple tap.
-                                                view.performHaptic(HapticEffect.Medium, hapticsEnabled)
-                                            },
-                                            onDrag = { change, dragAmount ->
-                                                change.consume()
-                                                dragOffsetY += dragAmount.y
-                                            },
-                                            onDragEnd = {
-                                                val from = draggedIndex
-                                                val moveBy = (dragOffsetY / rowHeightPx).roundToInt()
-                                                val to = (from + moveBy).coerceIn(0, queue.lastIndex)
-                                                if (from in queue.indices && from != to) {
-                                                    playbackController.moveQueueItem(from, to)
-                                                }
-                                                draggedIndex = -1
-                                                dragOffsetY = 0f
-                                            },
-                                            onDragCancel = {
-                                                draggedIndex = -1
-                                                dragOffsetY = 0f
-                                            },
-                                        )
-                                    },
-                                )
+                                // Gesture detector lives on this 48dp Box (the accessibility touch-
+                                // target minimum), not directly on the 24dp icon — the only
+                                // bare-icon-with-gesture instance in the app before this fix.
+                                Box(
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .pointerInput(index, queue.size) {
+                                            detectDragGesturesAfterLongPress(
+                                                onDragStart = {
+                                                    draggedIndex = index
+                                                    dragOffsetY = 0f
+                                                    // Medium: the start of a drag gesture is a more
+                                                    // deliberate engagement than a simple tap.
+                                                    view.performHaptic(HapticEffect.Medium, hapticsEnabled)
+                                                },
+                                                onDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    dragOffsetY += dragAmount.y
+                                                },
+                                                onDragEnd = {
+                                                    val from = draggedIndex
+                                                    val moveBy = (dragOffsetY / rowHeightPx).roundToInt()
+                                                    val to = (from + moveBy).coerceIn(0, queue.lastIndex)
+                                                    if (from in queue.indices && from != to) {
+                                                        playbackController.moveQueueItem(from, to)
+                                                    }
+                                                    draggedIndex = -1
+                                                    dragOffsetY = 0f
+                                                },
+                                                onDragCancel = {
+                                                    draggedIndex = -1
+                                                    dragOffsetY = 0f
+                                                },
+                                            )
+                                        },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        Icons.Filled.DragHandle,
+                                        contentDescription = stringResource(R.string.cd_reorder),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             },
                         )
                     }
